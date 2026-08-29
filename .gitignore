@@ -1,0 +1,27 @@
+/node_modules/
+/packages/*/dist/
+/packages/*/native/
+/packages/*/extension/
+/artifacts/
+/coverage/
+/.idea/
+*.iml
+
+# Generated from SAMPLE_* environment variables; may contain credentials.
+/examples/creator2/SampleEnvironment.generated.ts
+/examples/creator2/SampleEnvironment.generated.ts.meta
+/examples/creator3/SampleEnvironment.generated.ts
+/examples/creator3/SampleEnvironment.generated.ts.meta
+/examples/creator2-app/assets/Script/SampleEnvironment.generated.ts
+/examples/creator2-app/assets/Script/SampleEnvironment.generated.ts.meta
+
+# Staged into the publishable workspace by npm run build.
+/packages/cocos/LICENSE
+/packages/cocos/THIRD_PARTY_NOTICES
+
+# Local agent guidance and implementation notes (do not commit).
+/AGENTS.md
+/docs/
+
+*.tgz
+.DS_Store

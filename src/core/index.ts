@@ -1,0 +1,25 @@
+export type {
+  FTAttributes,
+  FTAutoTrackingConfig,
+  FTCocosConfig,
+  FTCocosEnterOptions,
+  FTCocosHybridConfig,
+  FTEnvironment,
+  FTHybridSessionReplayConfig,
+  FTLoggerConfig,
+  FTLogLevel,
+  FTPrimitive,
+  FTReplayPrivacyMode,
+  FTReplayTouchPrivacy,
+  FTResourceContent,
+  FTResourceMetrics,
+  FTRUMConfig,
+  FTSDKConfig,
+  FTSessionReplayConfig,
+  FTTraceConfig,
+  FTTraceType,
+  FTUserData,
+  FTValue,
+} from './types.js';
+
+export { FT_COCOS_SDK_VERSION } from './version.js';

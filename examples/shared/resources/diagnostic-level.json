@@ -1,0 +1,10 @@
+{
+  "id": "diagnostic-level-manifest",
+  "version": 1,
+  "waves": 3,
+  "requiredAssets": [
+    "player-avatar",
+    "level-boss",
+    "battle-grid"
+  ]
+}
