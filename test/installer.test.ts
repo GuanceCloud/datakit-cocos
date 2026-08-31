@@ -25,6 +25,10 @@ describe('native build integration', () => {
     expect(android).toContain('case "hybrid.attach"');
     expect(android).toContain('FTSdk.appendGlobalContext(COCOS_SDK_VERSION_KEY');
     expect(android).toContain('"setExternalRecorderActive"');
+    expect(android).toContain('.writeExternalSegment(');
+    expect(android).toContain('.setExternalRecordCount(');
+    expect(android).not.toContain('.writeFlutterSegment(');
+    expect(android).not.toContain('.setFlutterRecordCount(');
     expect(ios).toContain('@"hybrid.attach"');
     expect(ios).toContain('[FTMobileAgent appendGlobalContext:');
     expect(ios).toContain('@"setExternalRecorderActive:"');

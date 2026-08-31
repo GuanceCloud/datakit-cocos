@@ -143,11 +143,11 @@ public final class FTCocosBridge {
             case "replay.saveImage":
                 return saveReplayImage(payload);
             case "replay.writeSegment":
-                SessionReplayManager.get().writeFlutterSegment(
+                SessionReplayManager.get().writeExternalSegment(
                         payload.getString("segment"), payload.getString("viewId"));
                 return null;
             case "replay.setRecordCount":
-                SessionReplayManager.get().setFlutterRecordCount(
+                SessionReplayManager.get().setExternalRecordCount(
                         payload.getString("viewId"), payload.getLong("count"));
                 return null;
             case "replay.stop":
