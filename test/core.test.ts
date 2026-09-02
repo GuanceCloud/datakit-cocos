@@ -131,6 +131,41 @@ describe('core bridge API', () => {
     expect(() => rum.start({ androidAppId: 'a', sampleRate: 1.01 })).toThrow(/sampleRate/);
   });
 
+  it('records the Cocos SDK version in RUM and log bridge attributes', () => {
+    const transport = new RecordingTransport();
+    const rum = new FTRUM(transport);
+    const logger = new FTLogger(transport);
+    const attributes = { feature: 'checkout' };
+
+    rum.startView('View', attributes);
+    rum.stopView();
+    rum.addAction('Action');
+    rum.startAction('Started action');
+    rum.addError('message', 'stack');
+    rum.addLongTask('stack', 1);
+    rum.startResource('resource');
+    rum.stopResource('resource');
+    logger.log('message');
+
+    expect(attributes).toEqual({ feature: 'checkout' });
+    transport.calls.forEach((call) => {
+      expect((call.payload as { attributes: Record<string, string> }).attributes)
+        .toMatchObject({ sdk_bridge_info: '{"cocos":"0.1.0-alpha.1"}' });
+    });
+    expect((transport.calls[0]?.payload as { attributes: Record<string, string> }).attributes)
+      .toMatchObject({ feature: 'checkout' });
+  });
+
+  it('preserves an explicitly supplied bridge info attribute', () => {
+    const transport = new RecordingTransport();
+    new FTRUM(transport).startView('View', { sdk_bridge_info: 'custom' });
+
+    expect(transport.calls[0]).toEqual({
+      method: 'rum.startView',
+      payload: { name: 'View', attributes: { sdk_bridge_info: 'custom' } },
+    });
+  });
+
   it('parses success and error envelopes', () => {
     expect(parseTransportResponse<Record<string, string>>('{"ok":true,"value":{"x":"y"}}')).toEqual({ x: 'y' });
     expect(() => parseTransportResponse('{"ok":false,"error":"broken"}')).toThrow('broken');
@@ -176,15 +211,33 @@ describe('native host hybrid lifecycle', () => {
     tracking.start({ scenes: true }, 'InitialCocosView');
     expect(hooks.includeCurrent).toBe(false);
     expect(transport.calls).toEqual([
-      { method: 'rum.startView', payload: { name: 'InitialCocosView', attributes: undefined } },
+      {
+        method: 'rum.startView',
+        payload: {
+          name: 'InitialCocosView',
+          attributes: { sdk_bridge_info: '{"cocos":"0.1.0-alpha.1"}' },
+        },
+      },
     ]);
 
     hooks.sceneChanged?.('NextScene');
     tracking.stop();
     expect(transport.calls.slice(1)).toEqual([
-      { method: 'rum.stopView', payload: { attributes: undefined } },
-      { method: 'rum.startView', payload: { name: 'NextScene', attributes: undefined } },
-      { method: 'rum.stopView', payload: { attributes: undefined } },
+      {
+        method: 'rum.stopView',
+        payload: { attributes: { sdk_bridge_info: '{"cocos":"0.1.0-alpha.1"}' } },
+      },
+      {
+        method: 'rum.startView',
+        payload: {
+          name: 'NextScene',
+          attributes: { sdk_bridge_info: '{"cocos":"0.1.0-alpha.1"}' },
+        },
+      },
+      {
+        method: 'rum.stopView',
+        payload: { attributes: { sdk_bridge_info: '{"cocos":"0.1.0-alpha.1"}' } },
+      },
     ]);
   });
 

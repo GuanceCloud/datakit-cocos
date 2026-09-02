@@ -11,7 +11,12 @@ import type {
   FTUserData,
 } from './types.js';
 import { requireText, samplingRate } from './validation.js';
-import { FT_COCOS_SDK_VERSION, FT_COCOS_SDK_VERSION_KEY } from './version.js';
+import {
+  FT_COCOS_SDK_BRIDGE_INFO,
+  FT_COCOS_SDK_BRIDGE_INFO_KEY,
+  FT_COCOS_SDK_VERSION,
+  FT_COCOS_SDK_VERSION_KEY,
+} from './version.js';
 
 export class FTSDKOwnership {
   private mode: 'unclaimed' | 'standalone' | 'native-host' = 'unclaimed';
@@ -52,6 +57,13 @@ function compact<T extends object>(value: T): T {
     if (source[key] !== undefined) result[key] = source[key];
   });
   return result as T;
+}
+
+function withBridgeInfo(attributes?: FTAttributes): FTAttributes {
+  return {
+    [FT_COCOS_SDK_BRIDGE_INFO_KEY]: FT_COCOS_SDK_BRIDGE_INFO,
+    ...(attributes || {}),
+  };
 }
 
 /** Base SDK lifecycle and user identity operations. */
@@ -133,7 +145,10 @@ export class FTRUM {
    * @param attributes - Optional attributes attached to the view.
    */
   startView(name: string, attributes?: FTAttributes): void {
-    this.transport.invoke('rum.startView', { name: requireText(name, 'view name'), attributes });
+    this.transport.invoke('rum.startView', {
+      name: requireText(name, 'view name'),
+      attributes: withBridgeInfo(attributes),
+    });
   }
 
   /**
@@ -142,7 +157,7 @@ export class FTRUM {
    * @param attributes - Optional attributes attached when the view stops.
    */
   stopView(attributes?: FTAttributes): void {
-    this.transport.invoke('rum.stopView', { attributes });
+    this.transport.invoke('rum.stopView', { attributes: withBridgeInfo(attributes) });
   }
 
   /**
@@ -156,7 +171,7 @@ export class FTRUM {
     this.transport.invoke('rum.addAction', {
       name: requireText(name, 'action name'),
       type: requireText(type, 'action type'),
-      attributes,
+      attributes: withBridgeInfo(attributes),
     });
   }
 
@@ -171,7 +186,7 @@ export class FTRUM {
     this.transport.invoke('rum.startAction', {
       name: requireText(name, 'action name'),
       type: requireText(type, 'action type'),
-      attributes,
+      attributes: withBridgeInfo(attributes),
     });
   }
 
@@ -191,7 +206,13 @@ export class FTRUM {
     state: 'run' | 'startup' | 'unknown' = 'run',
     attributes?: FTAttributes,
   ): void {
-    this.transport.invoke('rum.addError', { message, stack, type, state, attributes });
+    this.transport.invoke('rum.addError', {
+      message,
+      stack,
+      type,
+      state,
+      attributes: withBridgeInfo(attributes),
+    });
   }
 
   /**
@@ -202,7 +223,11 @@ export class FTRUM {
    * @param attributes - Optional attributes attached to the task.
    */
   addLongTask(stack: string, durationNs: number, attributes?: FTAttributes): void {
-    this.transport.invoke('rum.addLongTask', { stack, durationNs, attributes });
+    this.transport.invoke('rum.addLongTask', {
+      stack,
+      durationNs,
+      attributes: withBridgeInfo(attributes),
+    });
   }
 
   /**
@@ -212,7 +237,10 @@ export class FTRUM {
    * @param attributes - Optional attributes attached to the resource.
    */
   startResource(key: string, attributes?: FTAttributes): void {
-    this.transport.invoke('rum.startResource', { key: requireText(key, 'resource key'), attributes });
+    this.transport.invoke('rum.startResource', {
+      key: requireText(key, 'resource key'),
+      attributes: withBridgeInfo(attributes),
+    });
   }
 
   /**
@@ -222,7 +250,10 @@ export class FTRUM {
    * @param attributes - Optional attributes attached when timing stops.
    */
   stopResource(key: string, attributes?: FTAttributes): void {
-    this.transport.invoke('rum.stopResource', { key: requireText(key, 'resource key'), attributes });
+    this.transport.invoke('rum.stopResource', {
+      key: requireText(key, 'resource key'),
+      attributes: withBridgeInfo(attributes),
+    });
   }
 
   /**
@@ -271,7 +302,11 @@ export class FTLogger {
    * @param attributes - Optional attributes attached to the log.
    */
   log(content: string, level: FTLogLevel = 'info', attributes?: FTAttributes): void {
-    this.transport.invoke('logger.log', { content, level, attributes });
+    this.transport.invoke('logger.log', {
+      content,
+      level,
+      attributes: withBridgeInfo(attributes),
+    });
   }
 }
 
