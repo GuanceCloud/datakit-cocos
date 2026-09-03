@@ -8,6 +8,11 @@ const cocosBootstraps = [
   'examples/creator2-app/assets/Script/SdkBootstrap.ts',
 ];
 
+const runnableHybridSamples = [
+  'examples/hybrid-creator2/assets/Script/HybridTelemetrySample.ts',
+  'examples/hybrid-creator3/assets/HybridTelemetrySample.ts',
+];
+
 describe('Hybrid diagnostic sample integration', () => {
   it.each(cocosBootstraps)('%s attaches, enters, and exposes the native exit boundary', (relativePath) => {
     const source = sourceAt(relativePath);
@@ -16,6 +21,13 @@ describe('Hybrid diagnostic sample integration', () => {
     expect(source).toContain('guanceSdk.leaveCocos();');
     expect(source).not.toContain('guanceSdk.start(');
     expect(source).not.toContain('SampleEnvironment.generated');
+  });
+
+  it.each(runnableHybridSamples)('%s includes an explicit Replay mask probe', (relativePath) => {
+    const source = sourceAt(relativePath);
+    expect(source).toContain("this.panel(replayNode, 'PrivacyMaskProbe'");
+    expect(source).toContain("guanceSdk.replay.setPrivacy(this.privacyMaskProbe, 'mask')");
+    expect(source).toContain('MASK-ME-8391');
   });
 
   it('initializes every native feature required by the Android Hybrid sample', () => {

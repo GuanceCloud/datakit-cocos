@@ -69,6 +69,7 @@ interface UntrackedXhrMethods {
 class HybridTelemetryRuntime {
   private status?: Label;
   private replayCard?: Graphics;
+  private privacyMaskProbe?: Node;
   private replayState = 0;
   private resourceSequence = 0;
   private entered = false;
@@ -105,6 +106,7 @@ class HybridTelemetryRuntime {
           network: true,
         },
       });
+      if (this.privacyMaskProbe) guanceSdk.replay.setPrivacy(this.privacyMaskProbe, 'mask');
       if (this.isNativePageVisible()) {
         this.setStatus('Hybrid attached · waiting for the native page to open Cocos', COLORS.info);
         this.waitForNativeReturn();
@@ -338,8 +340,10 @@ class HybridTelemetryRuntime {
 
     const replayNode = this.panel(root, 'ReplayVisualState', 0, 125, 720, 100, COLORS.info);
     this.replayCard = replayNode.getComponent(Graphics) || undefined;
-    this.label(replayNode, 'SESSION REPLAY VISUAL STATE', 0, 10, 660, 28, 22, COLORS.text);
-    this.label(replayNode, 'Tap “Replay change” several times to record visual deltas.', 0, -24, 660, 24, 15, COLORS.text);
+    this.label(replayNode, 'SESSION REPLAY VISUAL STATE', -125, 10, 390, 28, 22, COLORS.text);
+    this.label(replayNode, 'The token at right must be gray in Replay.', -125, -24, 390, 24, 15, COLORS.text);
+    this.privacyMaskProbe = this.panel(replayNode, 'PrivacyMaskProbe', 225, 0, 220, 70, COLORS.danger);
+    this.label(this.privacyMaskProbe, 'PRIVATE TOKEN\nMASK-ME-8391', 0, 0, 190, 52, 17, COLORS.text);
 
     this.button(root, 'AutoNetwork', 'Auto Network', -270, 28, 220, 56, () => this.emitAutomaticResource(), COLORS.info);
     this.button(root, 'ManualNetwork', 'Manual Trace', 0, 28, 220, 56, () => this.emitManualTraceResource(), COLORS.primary);
