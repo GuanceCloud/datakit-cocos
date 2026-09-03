@@ -1,10 +1,25 @@
-# Diagnostic game sample
+# Hybrid diagnostic game sample
 
-The diagnostic sample is a small, art-asset-free game flow for validating Cocos RUM and Session Replay on a native build. Both Creator 2.4 and Creator 3.x versions create real `LoginScene`, `LobbyScene`, `BattleScene`, and `ResultScene` instances at runtime.
+## Complete local-SDK projects
+
+Two independent, directly openable projects are available for checking the
+Hybrid integration documentation against a minimal implementation:
+
+- `hybrid-creator3/` — Cocos Creator 3.8.8
+- `hybrid-creator2/` — Cocos Creator 2.4.15
+
+Each project installs `@cloudcare/cocos-sdk` through
+`file:../../packages/cocos`, has an ignored per-project native environment,
+initializes RUM/Log/Trace/Replay in Android and iOS, and provides four buttons
+that create deterministic validation data. Start with the README inside the
+matching directory. The larger diagnostic game described below remains useful
+for multi-scene and fault-scenario coverage.
+
+The diagnostic sample is a small, art-asset-free Hybrid integration for validating Cocos RUM and Session Replay inside a native host. The native host owns Guance SDK initialization; Cocos attaches instrumentation only while the app is inside the Cocos runtime. Both Creator 2.4 and Creator 3.x versions create real `LoginScene`, `LobbyScene`, `BattleScene`, and `ResultScene` instances at runtime.
 
 ## Run it
 
-1. Configure the Sample from environment variables in the repository root:
+1. Configure the native host from environment variables in the repository root:
 
    ```bash
    export SAMPLE_DATAKIT_URL='https://your-datakit.example.com'
@@ -17,14 +32,22 @@ The diagnostic sample is a small, art-asset-free game flow for validating Cocos 
    `SAMPLE_DATAWAY_URL` and `SAMPLE_CLIENT_TOKEN`. At least one
    platform app ID is required. Optional variables are
    `SAMPLE_SERVICE_NAME`, `SAMPLE_ENV`, and `SAMPLE_DEBUG=true|false`.
-2. Install the matching SDK package and native bridge in a Cocos project.
+2. Install the matching Cocos SDK package and native bridge in a Cocos project.
 3. Copy `shared/` and either `creator2/` or `creator3/` into the project's `assets/` directory while preserving their relative layout.
-4. Create one empty startup scene and attach `DiagnosticSample` to any node.
-5. Build and run on Android or iOS. The editor/browser preview can render the flow, but the native build is required to upload telemetry and Replay data.
+4. Copy the matching files from `native-host/` into the generated native project. Keep Android files in the `com.cloudcare.cocos.sample` package, or update both package declarations together.
+5. Start the native SDK before Cocos starts JavaScript:
 
-`sample:configure` writes ignored `SampleEnvironment.generated.ts` files and never prints their values. Do not copy those values into `SdkBootstrap.ts` or force-add a generated file to Git.
+   - Android: call `HybridSampleSdk.start()` from `Application.onCreate()` or at the beginning of the generated Activity's `onCreate()`.
+   - iOS: call `[HybridSampleSDK start]` at the beginning of `application:didFinishLaunchingWithOptions:`, before forwarding launch to the Cocos app delegate.
 
-Leave `autoStartSdk` enabled for the standalone sample. Disable it when the host application starts `guanceSdk` before the sample component. The sample switches the Replay camera whenever it creates a scene. Its bootstrap leaves automatic network tracking off because the controlled network failure is manually instrumented with one shared `fault.id`; enabling both paths would intentionally produce duplicate network events.
+6. Create one empty startup scene and attach `DiagnosticSample` to any node. Leave `autoEnterCocos` enabled.
+7. Build and run on Android or iOS. Hybrid attachment intentionally requires a native build; editor/browser preview has no native SDK instance to attach to.
+
+`sample:configure` writes ignored Android and iOS native environment files and never prints their values. Do not move the endpoint, token, or RUM App IDs into `SdkBootstrap.ts`, and do not force-add generated environment files to Git.
+
+`SdkBootstrap.ts` calls `guanceSdk.attach()` followed by `guanceSdk.enterCocos()`. When the host really leaves or removes the Cocos container, call the exported `leaveCocos()` before teardown so native Session Replay resumes ownership. Do not call it for Cocos scene changes or from `DiagnosticSample.onDestroy()`: the startup component is destroyed when the sample creates its first runtime scene, while the app is still inside Cocos.
+
+The sample switches the Replay camera whenever it creates a scene. Its bootstrap leaves automatic network tracking off because the controlled network failure is manually instrumented with one shared `fault.id`; enabling both paths would intentionally produce duplicate network events.
 
 ## Coverage
 

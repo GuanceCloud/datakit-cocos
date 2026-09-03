@@ -6,9 +6,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 const temporaryDirectories: string[] = [];
 const generatedTargets = [
-  'examples/creator2/SampleEnvironment.generated.ts',
-  'examples/creator3/SampleEnvironment.generated.ts',
-  'examples/creator2-app/assets/Script/SampleEnvironment.generated.ts',
+  'examples/native-host/android/HybridSampleEnvironment.java',
+  'examples/native-host/ios/HybridSampleEnvironment.generated.h',
 ];
 
 afterEach(() => {
@@ -16,7 +15,7 @@ afterEach(() => {
 });
 
 describe('Sample environment configuration', () => {
-  it('generates equivalent ignored modules without printing credentials', () => {
+  it('generates native-host configuration without printing credentials', () => {
     const outputRoot = temporaryRoot();
     const environment = cleanEnvironment({
       SAMPLE_DATAWAY_URL: 'https://openway.example.test',
@@ -33,12 +32,17 @@ describe('Sample environment configuration', () => {
       { cwd: process.cwd(), encoding: 'utf8', env: environment },
     );
 
-    const sources = generatedTargets.map((target) => readFileSync(path.join(outputRoot, target), 'utf8'));
-    expect(new Set(sources)).toHaveLength(1);
-    expect(sources[0]).toContain('"datawayUrl": "https://openway.example.test"');
-    expect(sources[0]).toContain('"clientToken": "sample-client-token"');
-    expect(sources[0]).toContain('"env": "integration"');
-    expect(sources[0]).toContain('"debug": false');
+    const [android, ios] = generatedTargets.map((target) => readFileSync(path.join(outputRoot, target), 'utf8'));
+    expect(android).toContain('DATAWAY_URL = "https://openway.example.test"');
+    expect(android).toContain('CLIENT_TOKEN = "sample-client-token"');
+    expect(android).toContain('ANDROID_RUM_APP_ID = "android-sample-app"');
+    expect(android).toContain('ENV = "integration"');
+    expect(android).toContain('DEBUG = false');
+    expect(ios).toContain('FTHybridSampleDatawayURL = @"https://openway.example.test"');
+    expect(ios).toContain('FTHybridSampleClientToken = @"sample-client-token"');
+    expect(ios).toContain('FTHybridSampleIOSRumAppID = @"ios-sample-app"');
+    expect(ios).toContain('FTHybridSampleEnv = @"integration"');
+    expect(ios).toContain('FTHybridSampleDebug = NO');
     expect(output).not.toContain('sample-client-token');
   });
 
@@ -49,6 +53,32 @@ describe('Sample environment configuration', () => {
       ['scripts/configure-sample.mjs', '--output-root', outputRoot],
       { cwd: process.cwd(), stdio: 'pipe', env: cleanEnvironment() },
     )).toThrow();
+  });
+
+  it('can generate credentials directly inside an independent sample project', () => {
+    const outputRoot = temporaryRoot();
+    execFileSync(
+      process.execPath,
+      [
+        'scripts/configure-sample.mjs',
+        '--output-root', outputRoot,
+        '--native-host-dir', 'native-host',
+      ],
+      {
+        cwd: process.cwd(),
+        stdio: 'pipe',
+        env: cleanEnvironment({
+          SAMPLE_DATAWAY_URL: 'https://openway.example.test',
+          SAMPLE_CLIENT_TOKEN: 'sample-client-token',
+          SAMPLE_ANDROID_APP_ID: 'android-sample-app',
+        }),
+      },
+    );
+
+    expect(readFileSync(path.join(outputRoot, 'native-host/android/HybridSampleEnvironment.java'), 'utf8'))
+      .toContain('ANDROID_RUM_APP_ID = "android-sample-app"');
+    expect(readFileSync(path.join(outputRoot, 'native-host/ios/HybridSampleEnvironment.generated.h'), 'utf8'))
+      .toContain('FTHybridSampleIOSRumAppID = nil');
   });
 });
 

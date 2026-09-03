@@ -1,0 +1,16 @@
+/node_modules/
+/.idea/
+/library/
+/local/
+/temp/
+/build/
+/profiles/
+/native/
+/cocos-sdk-native/
+/extensions/guance-cocos-sdk/
+/native-host/android/HybridSampleEnvironment.java
+/native-host/ios/HybridSampleEnvironment.generated.h
+/settings/v2/packages/device.json
+/settings/v2/packages/information.json
+/settings/v2/packages/program.json
+*.log

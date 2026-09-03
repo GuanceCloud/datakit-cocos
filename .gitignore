@@ -9,6 +9,8 @@
 
 # Generated from SAMPLE_* environment variables; may contain credentials.
 *.generated.ts*
+/examples/native-host/android/HybridSampleEnvironment.java
+/examples/native-host/ios/HybridSampleEnvironment.generated.h
 
 # Staged into the publishable workspace by npm run build.
 /packages/cocos/LICENSE

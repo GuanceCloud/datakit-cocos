@@ -8,7 +8,7 @@ import {
   type DiagnosticPendingFault,
   type DiagnosticRole,
 } from '../shared/DiagnosticGameState';
-import { startSdk } from './SdkBootstrap';
+import { enterCocos } from './SdkBootstrap';
 
 const { ccclass, property } = cc._decorator;
 
@@ -29,15 +29,15 @@ let activeSample: Creator2DiagnosticSample | undefined;
 /** Creator 2.4 counterpart of the Creator 3 diagnostic game sample. */
 @ccclass
 export default class DiagnosticSample extends cc.Component {
-  @property({ tooltip: 'Disable when the host app already starts the SDK.' })
-  autoStartSdk = true;
+  @property({ tooltip: 'Attach to the SDK initialized by the native host and enter the Cocos runtime.' })
+  autoEnterCocos = true;
 
   @property({ tooltip: 'Stable ID used to correlate repeated diagnostic runs.' })
   sampleUserId = 'cocos-demo-001';
 
   start(): void {
     if (activeSample) return;
-    if (this.autoStartSdk) startSdk();
+    if (this.autoEnterCocos) enterCocos();
     activeSample = new Creator2DiagnosticSample(this.sampleUserId);
     activeSample.start();
   }

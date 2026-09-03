@@ -23,12 +23,18 @@ describe('native build integration', () => {
     const ios = readFileSync(resolve('native/ios/FTCocosBridge.m'), 'utf8');
 
     expect(android).toContain('case "hybrid.attach"');
+    expect(android).toContain('forwardToMainProcess(method, payload)');
     expect(android).toContain('FTSdk.appendGlobalContext(COCOS_SDK_VERSION_KEY');
     expect(android).toContain('"setExternalRecorderActive"');
     expect(android).toContain('.writeExternalSegment(');
     expect(android).toContain('.setExternalRecordCount(');
     expect(android).not.toContain('.writeFlutterSegment(');
     expect(android).not.toContain('.setFlutterRecordCount(');
+    const provider = readFileSync(
+      resolve('native/android/src/main/java/com/ft/sdk/cocos/FTCocosBridgeProvider.java'),
+      'utf8',
+    );
+    expect(provider).toContain('FTCocosBridge.invokeLocal(argument, payload)');
     expect(ios).toContain('@"hybrid.attach"');
     expect(ios).toContain('[FTMobileAgent appendGlobalContext:');
     expect(ios).toContain('@"setExternalRecorderActive:"');

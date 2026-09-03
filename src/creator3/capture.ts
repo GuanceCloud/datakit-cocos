@@ -2,6 +2,7 @@ import { Camera, Director, EditBox, RenderTexture, UITransform, director, native
 import type { FTCanvasCapture } from '../core/replay.js';
 import type { FTCapturedFrame, FTPrivacyRegion, FTReplayPrivacyMode, FTStoredFrame } from '../core/types.js';
 import { frameFingerprint } from '../core/replay.js';
+import { waitForRenderTextureReadback } from './replay-render-cycle.js';
 
 export class FTCreator3CanvasCapture implements FTCanvasCapture {
   private camera: any;
@@ -29,7 +30,7 @@ export class FTCreator3CanvasCapture implements FTCanvasCapture {
     let pixels: Uint8Array | undefined;
     try {
       camera.targetTexture = texture;
-      await afterDraw();
+      await waitForRenderTextureReadback(completeDrawCycle);
       pixels = texture.readPixels(0, 0, width, height);
     } finally {
       camera.targetTexture = previous;
@@ -88,8 +89,14 @@ export class FTCreator3CanvasCapture implements FTCanvasCapture {
   }
 }
 
-function afterDraw(): Promise<void> {
-  return new Promise((resolve) => director.once(Director.EVENT_AFTER_DRAW, resolve));
+async function completeDrawCycle(): Promise<void> {
+  // capture() may run after the current frame's render graph has already been
+  // prepared. Waiting only for EVENT_AFTER_DRAW can then read the newly bound
+  // RenderTexture before the camera has rendered into it, producing a black
+  // FullSnapshot at a Native -> Cocos boundary. Start at the next draw boundary
+  // so the target texture is guaranteed to participate in a complete frame.
+  await new Promise<void>((resolve) => director.once(Director.EVENT_BEFORE_DRAW, resolve));
+  await new Promise<void>((resolve) => director.once(Director.EVENT_AFTER_DRAW, resolve));
 }
 
 function flipRows(bytes: Uint8Array, width: number, height: number): void {

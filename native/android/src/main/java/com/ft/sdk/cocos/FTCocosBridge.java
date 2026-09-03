@@ -1,7 +1,13 @@
 package com.ft.sdk.cocos;
 
 import android.app.Activity;
+import android.app.ActivityManager;
+import android.app.Application;
 import android.content.Context;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Process;
 
 import com.ft.sdk.DetectFrequency;
 import com.ft.sdk.FTLogger;
@@ -46,6 +52,12 @@ public final class FTCocosBridge {
     }
 
     public static String invoke(String method, String payload) {
+        String forwarded = forwardToMainProcess(method, payload);
+        if (forwarded != null) return forwarded;
+        return invokeLocal(method, payload);
+    }
+
+    static String invokeLocal(String method, String payload) {
         try {
             Object value = dispatch(method, payload == null || payload.isEmpty()
                     ? new JSONObject() : new JSONObject(payload));
@@ -63,6 +75,51 @@ public final class FTCocosBridge {
             }
             return response.toString();
         }
+    }
+
+    private static String forwardToMainProcess(String method, String payload) {
+        Activity activity = resolveActivity();
+        if (activity == null || !isSecondaryProcess(activity)) return null;
+
+        try {
+            Bundle arguments = new Bundle();
+            arguments.putString(FTCocosBridgeProvider.ARGUMENT_PAYLOAD, payload);
+            Uri uri = Uri.parse("content://" + activity.getPackageName()
+                    + FTCocosBridgeProvider.AUTHORITY_SUFFIX);
+            Bundle result = activity.getContentResolver().call(
+                    uri,
+                    FTCocosBridgeProvider.METHOD_INVOKE,
+                    method,
+                    arguments);
+            return result == null
+                    ? null
+                    : result.getString(FTCocosBridgeProvider.RESULT_RESPONSE);
+        } catch (IllegalArgumentException providerUnavailable) {
+            // Existing integrations may not have registered the optional bridge
+            // provider yet. Preserve their same-process behavior.
+            return null;
+        }
+    }
+
+    private static boolean isSecondaryProcess(Context context) {
+        String currentProcess = currentProcessName(context);
+        String mainProcess = context.getApplicationInfo().processName;
+        return currentProcess != null && mainProcess != null && !mainProcess.equals(currentProcess);
+    }
+
+    private static String currentProcessName(Context context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return Application.getProcessName();
+        }
+        ActivityManager manager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+        if (manager == null) return null;
+        List<ActivityManager.RunningAppProcessInfo> processes = manager.getRunningAppProcesses();
+        if (processes == null) return null;
+        int currentPid = Process.myPid();
+        for (ActivityManager.RunningAppProcessInfo process : processes) {
+            if (process.pid == currentPid) return process.processName;
+        }
+        return null;
     }
 
     private static Object dispatch(String method, JSONObject payload) throws Exception {
