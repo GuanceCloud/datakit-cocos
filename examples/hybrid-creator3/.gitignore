@@ -10,6 +10,8 @@
 /extensions/guance-cocos-sdk/
 /native-host/android/HybridSampleEnvironment.java
 /native-host/ios/HybridSampleEnvironment.generated.h
+/native-host/android/ReplayTrafficBenchmarkEnvironment.java
+/native-host/ios/ReplayTrafficBenchmarkEnvironment.generated.h
 /settings/v2/packages/device.json
 /settings/v2/packages/information.json
 /settings/v2/packages/program.json

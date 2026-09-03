@@ -5,7 +5,7 @@ export interface FTReplayImageRecord {
   resourceId: string;
   width: number;
   height: number;
-  mimeType?: 'image/png';
+  mimeType?: `image/${string}`;
   timestamp: number;
   contextChanged: boolean;
   pointerEvents?: FTReplayPointerRecord[];

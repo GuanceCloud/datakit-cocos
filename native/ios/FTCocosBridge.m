@@ -200,6 +200,43 @@
                                            first:png
                                           second:@"image/png"];
     }
+    if ([method isEqualToString:@"replay.saveImageV2"]) {
+        NSUInteger width = [arguments[@"width"] unsignedIntegerValue];
+        NSUInteger height = [arguments[@"height"] unsignedIntegerValue];
+        NSData *rgba = [NSData dataWithContentsOfFile:[self requiredText:arguments key:@"path"]];
+        if (!rgba) [self fail:@"Unable to read replay RGBA file"];
+        UIImage *image = [self imageFromRGBA:rgba width:width height:height];
+        if (!image) [self fail:@"Unable to decode replay RGBA image"];
+
+        CGFloat quality = MIN(1.0, MAX(0.1, [arguments[@"quality"] doubleValue] ?: 0.45));
+        NSUInteger maxFrameBytes = [arguments[@"maxFrameBytes"] unsignedIntegerValue] ?: 40 * 1024;
+        UIImage *encodedImage = [self opaqueImageFromImage:image size:CGSizeMake(width, height)];
+        NSData *jpeg = UIImageJPEGRepresentation(encodedImage, quality);
+        if (jpeg.length > maxFrameBytes) {
+            quality = MAX(0.2, quality * 0.7);
+            jpeg = UIImageJPEGRepresentation(encodedImage, quality);
+        }
+        if (jpeg.length > maxFrameBytes && width > 1 && height > 1) {
+            width = MAX(1, (NSUInteger)floor(width * 0.75));
+            height = MAX(1, (NSUInteger)floor(height * 0.75));
+            encodedImage = [self opaqueImageFromImage:image size:CGSizeMake(width, height)];
+            jpeg = UIImageJPEGRepresentation(encodedImage, quality);
+        }
+        if (!jpeg || jpeg.length > maxFrameBytes) return @{ @"accepted": @NO };
+
+        NSString *resourceID = [self invokeReplayObjectSelector:NSSelectorFromString(@"saveExternalImageResourceData:mimeType:")
+                                                          first:jpeg
+                                                         second:@"image/jpeg"];
+        if (resourceID.length == 0) [self fail:@"Unable to save replay image resource"];
+        return @{
+            @"accepted": @YES,
+            @"resourceId": resourceID,
+            @"byteSize": @(jpeg.length),
+            @"width": @(width),
+            @"height": @(height),
+            @"mimeType": @"image/jpeg",
+        };
+    }
     if ([method isEqualToString:@"replay.writeSegment"]) {
         [self invokeReplayVoidSelector:NSSelectorFromString(@"writeExternalSegment:viewID:")
                                 first:[self requiredText:arguments key:@"segment"]
@@ -321,6 +358,11 @@
 }
 
 + (NSData *)pngDataFromRGBA:(NSData *)rgba width:(NSUInteger)width height:(NSUInteger)height {
+    UIImage *image = [self imageFromRGBA:rgba width:width height:height];
+    return image ? UIImagePNGRepresentation(image) : nil;
+}
+
++ (UIImage *)imageFromRGBA:(NSData *)rgba width:(NSUInteger)width height:(NSUInteger)height {
     if (width == 0 || height == 0 || width > NSUIntegerMax / height / 4 || rgba.length < width * height * 4) {
         return nil;
     }
@@ -341,7 +383,17 @@
     if (!imageRef) return nil;
     UIImage *image = [UIImage imageWithCGImage:imageRef];
     CGImageRelease(imageRef);
-    return UIImagePNGRepresentation(image);
+    return image;
+}
+
++ (UIImage *)opaqueImageFromImage:(UIImage *)image size:(CGSize)size {
+    UIGraphicsBeginImageContextWithOptions(size, YES, 1.0);
+    [[UIColor whiteColor] setFill];
+    UIRectFill(CGRectMake(0, 0, size.width, size.height));
+    [image drawInRect:CGRectMake(0, 0, size.width, size.height)];
+    UIImage *opaque = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    return opaque;
 }
 
 + (NSString *)responseWithValue:(id)value error:(NSString *)error {

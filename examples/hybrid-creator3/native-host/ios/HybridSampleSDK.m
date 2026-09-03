@@ -1,6 +1,12 @@
 #import "HybridSampleSDK.h"
 #import "HybridSampleEnvironment.generated.h"
 
+#if __has_include("ReplayTrafficBenchmarkEnvironment.generated.h")
+#import "ReplayTrafficBenchmarkEnvironment.generated.h"
+#else
+static NSString * const FTReplayTrafficBenchmarkBootstrapJSON = @"{\"enabled\":false}";
+#endif
+
 #import <GuanceSDK/GuanceSDK.h>
 #import <GuanceSDK/GuanceSessionReplay.h>
 
@@ -153,11 +159,14 @@ static __weak UIViewController *FTHybridNativePageController;
     [[FTRumSessionReplay sharedInstance] startWithSessionReplayConfig:replayConfig];
 
     // Keep Cocos attached but not entered until the initial native page is dismissed.
-    FTHybridNativePageVisible = YES;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)),
-                   dispatch_get_main_queue(), ^{
-        [self showNativePage];
-    });
+    BOOL benchmarkEnabled = [[self replayTrafficBenchmarkConfiguration][@"enabled"] boolValue];
+    FTHybridNativePageVisible = !benchmarkEnabled;
+    if (!benchmarkEnabled) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            [self showNativePage];
+        });
+    }
 }
 
 + (void)showNativePage {
@@ -194,6 +203,34 @@ static __weak UIViewController *FTHybridNativePageController;
 
 + (BOOL)isNativePageVisible {
     return FTHybridNativePageVisible;
+}
+
++ (NSString *)replayTrafficBenchmarkConfig {
+    return FTReplayTrafficBenchmarkBootstrapJSON ?: @"{\"enabled\":false}";
+}
+
++ (void)prepareReplayTrafficBenchmark:(NSString *)json {
+    NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
+    NSDictionary *value = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+    if (![value isKindOfClass:NSDictionary.class]) {
+        [NSException raise:NSInvalidArgumentException format:@"Invalid Replay Traffic Benchmark config"];
+    }
+    [FTMobileAgent appendGlobalContext:@{
+        @"replay_benchmark_run_id": value[@"runId"] ?: @"missing",
+        @"replay_benchmark_group": value[@"groupId"] ?: @"missing",
+        @"replay_benchmark_scenario": value[@"scenario"] ?: @"missing",
+        @"replay_benchmark_repeat": [value[@"repeat"] stringValue] ?: @"missing",
+    }];
+}
+
++ (void)flushReplayTrafficBenchmark {
+    [[FTMobileAgent sharedInstance] flushSyncData];
+}
+
++ (NSDictionary *)replayTrafficBenchmarkConfiguration {
+    NSData *data = [[self replayTrafficBenchmarkConfig] dataUsingEncoding:NSUTF8StringEncoding];
+    NSDictionary *value = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+    return [value isKindOfClass:NSDictionary.class] ? value : @{};
 }
 
 @end

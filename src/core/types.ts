@@ -124,6 +124,21 @@ export type FTReplayPrivacyMode = 'mask' | 'hide' | 'unmask';
 /** Whether Session Replay records touch positions. */
 export type FTReplayTouchPrivacy = 'show' | 'hide';
 
+/** Image quality preset used by Cocos Session Replay. */
+export type FTReplayQuality = 'low' | 'medium' | 'high';
+
+/** Image traffic controls for Cocos Session Replay. */
+export interface FTReplayImagePolicy {
+  /** Compression, size, and traffic preset. @defaultValue `'medium'` */
+  quality?: FTReplayQuality;
+  /** Maximum encoded bytes for a normal image resource. */
+  maxFrameBytes?: number;
+  /** Maximum encoded image bytes retained in a rolling 60-second window. */
+  maxBytesPerMinute?: number;
+  /** Adapts effective capture rate, image quality, and size as the budget fills. @defaultValue `true` */
+  adaptiveCapture?: boolean;
+}
+
 /** Session Replay configuration for standalone Cocos applications. */
 export interface FTSessionReplayConfig {
   /** Replay sampling rate from `0` to `1`. */
@@ -134,6 +149,8 @@ export interface FTSessionReplayConfig {
   captureFps?: number;
   /** Maximum width or height of a captured frame. Accepts `1` to `2048`. @defaultValue `720` */
   maxImageDimension?: number;
+  /** Image compression and rolling traffic-budget controls. */
+  imagePolicy?: FTReplayImagePolicy;
   /** Whether captured replays include touch positions. @defaultValue `'hide'` */
   touchPrivacy?: FTReplayTouchPrivacy;
 }
@@ -144,6 +161,8 @@ export interface FTHybridSessionReplayConfig {
   captureFps?: number;
   /** Maximum width or height of a captured frame. Accepts `1` to `2048`. @defaultValue `720` */
   maxImageDimension?: number;
+  /** Image compression and rolling traffic-budget controls. */
+  imagePolicy?: FTReplayImagePolicy;
   /** Whether captured replays include touch positions. @defaultValue `'hide'` */
   touchPrivacy?: FTReplayTouchPrivacy;
 }

@@ -38,6 +38,11 @@ public final class HybridSampleNativeActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         HybridSampleSdk.start();
+        if (HybridSampleSdk.isReplayTrafficBenchmarkEnabled()) {
+            openCocos();
+            finish();
+            return;
+        }
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
         setContentView(createContent());
     }

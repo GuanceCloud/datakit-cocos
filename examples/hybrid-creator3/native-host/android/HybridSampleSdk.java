@@ -15,6 +15,11 @@ import com.ft.sdk.sessionreplay.TextAndInputPrivacy;
 import com.ft.sdk.sessionreplay.TouchPrivacy;
 import com.cocos.lib.GlobalObject;
 
+import org.json.JSONObject;
+
+import java.lang.reflect.Field;
+import java.util.HashMap;
+
 /** Native SDK owner for the Cocos Hybrid sample. Call before Cocos starts JavaScript. */
 public final class HybridSampleSdk {
     private static boolean started;
@@ -82,6 +87,48 @@ public final class HybridSampleSdk {
     /** Read by the Cocos page before it claims RUM View and Replay ownership. */
     public static boolean isNativePageVisible() {
         return HybridSampleNativeActivity.isVisible();
+    }
+
+    /** Returns an optional, generated benchmark bootstrap without adding a production bridge API. */
+    public static String replayTrafficBenchmarkConfig() {
+        try {
+            Class<?> environment = Class.forName(
+                    "com.cloudcare.cocos.sample.ReplayTrafficBenchmarkEnvironment");
+            Field field = environment.getDeclaredField("CONFIG_JSON");
+            field.setAccessible(true);
+            Object value = field.get(null);
+            return value instanceof String ? (String) value : "{\"enabled\":false}";
+        } catch (Exception ignored) {
+            return "{\"enabled\":false}";
+        }
+    }
+
+    /** Adds the unique run markers before the benchmark starts its RUM View. */
+    public static void prepareReplayTrafficBenchmark(String json) {
+        try {
+            JSONObject value = new JSONObject(json);
+            HashMap<String, Object> context = new HashMap<>();
+            context.put("replay_benchmark_run_id", value.getString("runId"));
+            context.put("replay_benchmark_group", value.getString("groupId"));
+            context.put("replay_benchmark_scenario", value.getString("scenario"));
+            context.put("replay_benchmark_repeat", value.getInt("repeat"));
+            FTSdk.appendGlobalContext(context);
+        } catch (Exception error) {
+            throw new IllegalArgumentException("Invalid Replay Traffic Benchmark config", error);
+        }
+    }
+
+    /** Requests an immediate native SDK upload after Cocos capture stops. */
+    public static void flushReplayTrafficBenchmark() {
+        FTSdk.flushSyncData();
+    }
+
+    public static boolean isReplayTrafficBenchmarkEnabled() {
+        try {
+            return new JSONObject(replayTrafficBenchmarkConfig()).optBoolean("enabled", false);
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     private static HandlerView nativeView(Activity activity) {

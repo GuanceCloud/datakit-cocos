@@ -17,6 +17,15 @@ NS_ASSUME_NONNULL_BEGIN
 /** Read by Cocos before entering or re-entering its Hybrid lifecycle. */
 + (BOOL)isNativePageVisible;
 
+/** Returns an optional generated local benchmark bootstrap. */
++ (NSString *)replayTrafficBenchmarkConfig;
+
+/** Adds the unique benchmark run markers before the Cocos View starts. */
++ (void)prepareReplayTrafficBenchmark:(NSString *)json;
+
+/** Requests an immediate native SDK flush after Cocos Replay stops. */
++ (void)flushReplayTrafficBenchmark;
+
 @end
 
 NS_ASSUME_NONNULL_END

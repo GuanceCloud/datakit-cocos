@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { FTDefaultAutoTracking, type FTEngineTrackingHooks } from '../src/core/auto-tracking';
 import { FTCocosSDK, type FTAutoTrackingController } from '../src/core/client';
 import { FTLogger, FTMobileAgent, FTRUM, FTTrace } from '../src/core/modules';
@@ -7,6 +7,9 @@ import {
   FTSessionReplay,
   applyPrivacyRegions,
   frameFingerprint,
+  normalizeSaveImageV2Result,
+  replayFramesLookSimilar,
+  sampleReplayFrame,
   type FTCanvasCapture,
   type FTReplayPointerEvent,
   type FTReplayPointerSource,
@@ -33,6 +36,7 @@ class RecordingTransport implements FTNativeTransport {
 }
 
 class StaticCapture implements FTCanvasCapture {
+  captures = 0;
   disposed = 0;
   readonly rgba = new Uint8Array([
     255, 0, 0, 255,
@@ -42,6 +46,7 @@ class StaticCapture implements FTCanvasCapture {
   ]);
 
   async capture(): Promise<FTCapturedFrame> {
+    this.captures += 1;
     return {
       rgba: this.rgba.slice(),
       width: 2,
@@ -304,6 +309,35 @@ describe('native host hybrid lifecycle', () => {
 });
 
 describe('session replay', () => {
+  it('normalizes V2 image results and rejects malformed bridge values', () => {
+    expect(normalizeSaveImageV2Result({
+      resource_id: 'resource',
+      byte_size: 1234,
+      width: 320,
+      height: 180,
+      mime_type: 'image/jpeg',
+    })).toEqual({
+      resourceId: 'resource',
+      byteSize: 1234,
+      width: 320,
+      height: 180,
+      mimeType: 'image/jpeg',
+    });
+    expect(() => normalizeSaveImageV2Result({ resourceId: 'resource' })).toThrow(/Invalid/);
+  });
+
+  it('skips nearly static frames but keeps visibly changed frames', () => {
+    const base = new Uint8Array(100 * 4).fill(100);
+    for (let index = 3; index < base.length; index += 4) base[index] = 255;
+    const nearlyStatic = base.slice();
+    nearlyStatic[0] = 103;
+    const changed = base.slice();
+    for (let index = 0; index < changed.length / 2; index += 4) changed[index] = 255;
+    const sample = sampleReplayFrame(base, 10, 10);
+    expect(replayFramesLookSimilar(sample, sampleReplayFrame(nearlyStatic, 10, 10))).toBe(true);
+    expect(replayFramesLookSimilar(sample, sampleReplayFrame(changed, 10, 10))).toBe(false);
+  });
+
   it('masks and hides pixels before persistence', () => {
     const pixels = new Uint8Array(3 * 2 * 4).fill(255);
     applyPrivacyRegions(pixels, 3, 2, [
@@ -331,6 +365,92 @@ describe('session replay', () => {
     expect(countCall?.payload).toEqual({ viewId: 'view-id', count: 3 });
     expect(capture.disposed).toBe(1);
     expect(frameFingerprint(capture.rgba)).toMatch(/^10-/);
+  });
+
+  it('uses V2 metadata in the existing image wireframe', async () => {
+    class V2Transport extends RecordingTransport {
+      override invoke<T>(method: string, payload?: unknown): T | undefined {
+        this.calls.push({ method, payload });
+        if (method === 'replay.getContext') {
+          return { application_id: 'app-id', session_id: 'session-id', view_id: 'view-id' } as T;
+        }
+        if (method === 'replay.saveImageV2') {
+          return {
+            resourceId: 'jpeg-resource',
+            byteSize: 2048,
+            width: 2,
+            height: 2,
+            mimeType: 'image/jpeg',
+          } as T;
+        }
+        return undefined;
+      }
+    }
+    const transport = new V2Transport();
+    const replay = new FTSessionReplay(transport, new StaticCapture());
+
+    replay.start({ imagePolicy: {} });
+    await expect(replay.captureNow()).resolves.toBe(true);
+    replay.stop();
+
+    expect(transport.calls.some((call) => call.method === 'replay.saveImage')).toBe(false);
+    const call = transport.calls.find((item) => item.method === 'replay.writeSegment');
+    const segment = JSON.parse((call?.payload as { segment: string }).segment);
+    expect(segment.records[2].data.wireframes[0]).toMatchObject({
+      resourceId: 'jpeg-resource',
+      mimeType: 'image/jpeg',
+    });
+  });
+
+  it('probes an unsupported V2 bridge once and keeps using V1', async () => {
+    class LegacyTransport extends RecordingTransport {
+      v2Attempts = 0;
+
+      override invoke<T>(method: string, payload?: unknown): T | undefined {
+        if (method === 'replay.saveImageV2') {
+          this.v2Attempts += 1;
+          throw new Error('Unknown bridge method: replay.saveImageV2');
+        }
+        return super.invoke<T>(method, payload);
+      }
+    }
+    class ChangingCapture extends StaticCapture {
+      override async capture(): Promise<FTCapturedFrame> {
+        const frame = await super.capture();
+        if (this.captures > 1) frame.rgba.set([255, 255, 0, 255], 8);
+        return frame;
+      }
+    }
+    const transport = new LegacyTransport();
+    const replay = new FTSessionReplay(transport, new ChangingCapture());
+
+    replay.start({ imagePolicy: {} });
+    await expect(replay.captureNow()).resolves.toBe(true);
+    await expect(replay.captureNow()).resolves.toBe(true);
+    replay.stop();
+
+    expect(transport.v2Attempts).toBe(1);
+    expect(transport.calls.filter((call) => call.method === 'replay.saveImage')).toHaveLength(2);
+  });
+
+  it('drops one failed frame without disabling the next capture', async () => {
+    class FlakyCapture extends StaticCapture {
+      attempts = 0;
+
+      override async persist(frame: FTCapturedFrame, fingerprint: string): Promise<FTStoredFrame> {
+        if (this.attempts++ === 0) throw new Error('encoding failed');
+        return super.persist(frame, fingerprint);
+      }
+    }
+    const capture = new FlakyCapture();
+    const replay = new FTSessionReplay(new RecordingTransport(), capture);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await expect(replay.captureNow()).resolves.toBe(false);
+      await expect(replay.captureNow()).resolves.toBe(true);
+    } finally {
+      error.mockRestore();
+    }
   });
 
   it('writes replay pointer interactions even when the next frame is identical', async () => {
@@ -390,6 +510,37 @@ describe('session replay', () => {
     const countCalls = transport.calls.filter((call) => call.method === 'replay.setRecordCount');
     expect(countCalls[countCalls.length - 1]?.payload).toEqual({ viewId: 'view-id', count: 5 });
     expect(pointers).toMatchObject({ starts: 1, stops: 1 });
+  });
+
+  it('skips GPU capture when the rolling budget is full but still writes pointers', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    const transport = new RecordingTransport();
+    const capture = new StaticCapture();
+    const pointers = new RecordingPointerSource();
+    const replay = new FTSessionReplay(transport, capture, pointers);
+    try {
+      replay.start({
+        touchPrivacy: 'show',
+        imagePolicy: { maxFrameBytes: 1024, maxBytesPerMinute: 16 * 1024 },
+      });
+      await expect(replay.captureNow()).resolves.toBe(true);
+      pointers.emit({
+        eventType: 'move',
+        pointerId: 1,
+        normalizedX: 0.5,
+        normalizedY: 0.5,
+        timestamp: 1_100,
+      });
+      await expect(replay.captureNow()).resolves.toBe(true);
+
+      expect(capture.captures).toBe(1);
+      const segments = transport.calls.filter((call) => call.method === 'replay.writeSegment');
+      expect(JSON.parse((segments[1]?.payload as { segment: string }).segment).records[0].type).toBe(11);
+    } finally {
+      replay.stop();
+      vi.useRealTimers();
+    }
   });
 
   it('keeps touch collection disabled unless touch privacy explicitly allows it', () => {

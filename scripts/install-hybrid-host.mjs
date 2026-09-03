@@ -43,6 +43,10 @@ if (!existsSync(bridgeInstaller)) {
 }
 
 const nativeHostSource = path.join(projectRoot, 'native-host');
+const replayBenchmarkEnabled = existsSync(path.join(
+  nativeHostSource,
+  'android/ReplayTrafficBenchmarkEnvironment.java',
+));
 const requiredHostFiles = [
   'android/HybridSampleSdk.java',
   'android/HybridSampleEnvironment.java',
@@ -78,6 +82,7 @@ const podfiles = files.filter((file) => path.basename(file) === 'Podfile');
 const iosLaunchFiles = files.filter((file) => ['AppDelegate.mm', 'AppController.mm'].includes(path.basename(file)));
 
 gradleFiles.forEach((file) => patchGradle(file, path.join(nativeHostBuild, 'android')));
+if (replayBenchmarkEnabled) gradleFiles.forEach(patchLocalBenchmarkAndroidDependencies);
 appActivities.forEach(patchAndroidLaunch);
 rootGradleFiles.forEach(patchFTPluginClasspath);
 androidManifests.forEach((file) => patchAndroidManifest(file, creator));
@@ -144,6 +149,23 @@ function patchGradle(file, androidHostRoot) {
   );
   block.push(ANDROID_END);
   replaceMarkedBlock(file, ANDROID_BEGIN, ANDROID_END, block.join('\n'));
+}
+
+function patchLocalBenchmarkAndroidDependencies(file) {
+  const applicationDirectory = path.dirname(file);
+  const localSdk = path.join(applicationDirectory, 'libs/ft-sdk-debug.aar');
+  const localReplay = path.join(applicationDirectory, 'libs/ft-session-replay-debug.aar');
+  if (!existsSync(localSdk) || !existsSync(localReplay)) {
+    fail('Replay Traffic Benchmark requires local ft-sdk-debug.aar and ft-session-replay-debug.aar');
+  }
+  const source = readFileSync(file, 'utf8');
+  const next = source
+    .replace(/^\s*implementation ['"]com\.cloudcare\.ft\.mobile\.sdk\.tracker\.agent:ft-sdk:[^'"]+['"]\s*$/m, '')
+    .replace(/^\s*implementation ['"]com\.cloudcare\.ft\.mobile\.sdk\.tracker\.agent:ft-session-replay:[^'"]+['"]\s*$/m, '');
+  if (next === source) {
+    fail(`Unable to select local Android SDK AARs in ${file}`);
+  }
+  writeFileSync(file, next);
 }
 
 function patchFTPluginClasspath(file) {

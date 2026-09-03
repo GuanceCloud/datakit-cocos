@@ -199,6 +199,8 @@ public final class FTCocosBridge {
                 return SessionReplayManager.get().getCurrentFlutterRumContext();
             case "replay.saveImage":
                 return saveReplayImage(payload);
+            case "replay.saveImageV2":
+                return saveReplayImageV2(payload);
             case "replay.writeSegment":
                 SessionReplayManager.get().writeExternalSegment(
                         payload.getString("segment"), payload.getString("viewId"));
@@ -380,6 +382,35 @@ public final class FTCocosBridge {
     private static String saveReplayImage(JSONObject json) throws Exception {
         byte[] bytes = readFile(new File(json.getString("path")));
         return SessionReplayManager.get().saveFlutterImageResource(bytes, json.getInt("width"), json.getInt("height"));
+    }
+
+    private static Object saveReplayImageV2(JSONObject json) throws Exception {
+        byte[] bytes = readFile(new File(json.getString("path")));
+        Method method;
+        try {
+            method = SessionReplayManager.class.getMethod(
+                    "saveExternalImageResourceV2",
+                    byte[].class,
+                    int.class,
+                    int.class,
+                    float.class,
+                    int.class);
+        } catch (NoSuchMethodException unavailable) {
+            throw new IllegalArgumentException("Unknown bridge method: replay.saveImageV2");
+        }
+        try {
+            return method.invoke(
+                    SessionReplayManager.get(),
+                    bytes,
+                    json.getInt("width"),
+                    json.getInt("height"),
+                    (float) json.optDouble("quality", 0.45),
+                    json.optInt("maxFrameBytes", 40 * 1024));
+        } catch (InvocationTargetException error) {
+            Throwable cause = error.getCause();
+            if (cause instanceof Exception) throw (Exception) cause;
+            throw error;
+        }
     }
 
     private static Activity resolveActivity() {

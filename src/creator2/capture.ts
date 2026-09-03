@@ -16,11 +16,17 @@ export class FTCreator2CanvasCapture implements FTCanvasCapture {
     else this.privacy.set(node, mode);
   }
 
+  getViewportSize(): { width: number; height: number } | undefined {
+    const visible = cc.view.getVisibleSizeInPixel?.() || cc.view.getVisibleSize();
+    return visible ? { width: visible.width, height: visible.height } : undefined;
+  }
+
   async capture(maxImageDimension: number): Promise<FTCapturedFrame | undefined> {
     const scene = cc.director.getScene();
     const camera = this.camera || scene?.getComponentInChildren?.(cc.Camera);
     if (!camera) return undefined;
-    const visible = cc.view.getVisibleSizeInPixel?.() || cc.view.getVisibleSize();
+    const visible = this.getViewportSize();
+    if (!visible) return undefined;
     const scale = Math.min(1, maxImageDimension / Math.max(visible.width, visible.height));
     const width = Math.max(1, Math.round(visible.width * scale));
     const height = Math.max(1, Math.round(visible.height * scale));
