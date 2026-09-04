@@ -1,0 +1,110 @@
+name: Publish npm package
+
+on:
+  push:
+    tags:
+      - "agent_*"
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  publish:
+    name: Publish package
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Validate version and select npm dist-tag
+        id: release
+        env:
+          RELEASE_GIT_TAG: ${{ github.ref_name }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+
+          const rootVersion = require('./package.json').version;
+          const packageVersion = require('./packages/cocos/package.json').version;
+          const sdkSource = fs.readFileSync('./src/core/version.ts', 'utf8');
+          const podspecSource = fs.readFileSync('./native/ios/FTCocosBridge.podspec', 'utf8');
+          const sdkVersion = sdkSource.match(/FT_COCOS_SDK_VERSION\s*=\s*'([^']+)'/)?.[1];
+          const podspecVersion = podspecSource.match(/s\.version\s*=\s*'([^']+)'/)?.[1];
+          const gitTag = process.env.RELEASE_GIT_TAG;
+
+          if (!gitTag?.startsWith('agent_')) {
+            throw new Error(`Release tag must start with agent_: ${gitTag}`);
+          }
+
+          const gitVersion = gitTag.slice('agent_'.length);
+          const versions = {
+            'root package': rootVersion,
+            'npm package': packageVersion,
+            'SDK runtime': sdkVersion,
+            'iOS podspec': podspecVersion,
+            'Git tag': gitVersion,
+          };
+          const mismatches = Object.entries(versions).filter(([, version]) => version !== packageVersion);
+
+          if (mismatches.length > 0) {
+            const details = Object.entries(versions)
+              .map(([source, version]) => `${source}: ${version ?? '<missing>'}`)
+              .join('\n');
+            throw new Error(`Release versions do not match:\n${details}`);
+          }
+
+          let npmDistTag;
+          if (/^\d+\.\d+\.\d+-alpha\.\d+$/.test(packageVersion)) {
+            npmDistTag = 'alpha';
+          } else if (/^\d+\.\d+\.\d+-beta\.\d+$/.test(packageVersion)) {
+            npmDistTag = 'beta';
+          } else if (/^\d+\.\d+\.\d+$/.test(packageVersion)) {
+            npmDistTag = 'latest';
+          } else {
+            throw new Error(`Unsupported release version: ${packageVersion}`);
+          }
+
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `npm_dist_tag=${npmDistTag}\n`);
+          console.log(`Publishing ${packageVersion} with npm dist-tag ${npmDistTag}`);
+          NODE
+
+      - name: Publish to npm
+        run: >-
+          npm publish
+          --workspace @cloudcare/cocos-sdk
+          --tag "${{ steps.release.outputs.npm_dist_tag }}"
+          --access public
