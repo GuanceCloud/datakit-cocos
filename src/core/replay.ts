@@ -51,6 +51,10 @@ export interface FTReplaySaveImageV2Result {
   mimeType?: `image/${string}`;
 }
 
+interface FTReplaySavedImage extends FTReplaySaveImageV2Result {
+  byteSizeSource: 'native' | 'frame_limit_estimate';
+}
+
 export interface FTReplayFrameSample {
   width: number;
   height: number;
@@ -290,6 +294,7 @@ export class FTSessionReplay {
         height: saved.height,
         ...(saved.mimeType ? { mimeType: saved.mimeType } : {}),
         priority: decision.priority,
+        byteSizeSource: saved.byteSizeSource,
       });
       this.lastFingerprint = fingerprint;
       this.lastContextKey = contextKey;
@@ -380,7 +385,7 @@ export class FTSessionReplay {
     stored: FTStoredFrame,
     compressionQuality: number,
     maxFrameBytes: number,
-  ): FTReplaySaveImageV2Result | undefined {
+  ): FTReplaySavedImage | undefined {
     if (this.imagePolicyEnabled && this.supportsSaveImageV2 !== false) {
       try {
         const value = this.transport.invoke('replay.saveImageV2', {
@@ -393,7 +398,7 @@ export class FTSessionReplay {
         if (value !== undefined) {
           this.supportsSaveImageV2 = true;
           if (isRejectedSaveImageV2(value)) return undefined;
-          return normalizeSaveImageV2Result(value);
+          return { ...normalizeSaveImageV2Result(value), byteSizeSource: 'native' };
         }
         this.supportsSaveImageV2 = false;
       } catch (error) {
@@ -415,6 +420,7 @@ export class FTSessionReplay {
       byteSize: maxFrameBytes,
       width: stored.width,
       height: stored.height,
+      byteSizeSource: 'frame_limit_estimate',
       ...(this.transport.platform === 'ios' ? { mimeType: 'image/png' as const } : {}),
     };
   }

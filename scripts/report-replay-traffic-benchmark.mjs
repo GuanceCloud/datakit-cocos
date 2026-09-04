@@ -33,10 +33,44 @@ export function analyzeReplayTrafficRun(run) {
   const pointerEvents = events.filter((event) => event.type === 'pointer_received');
   const imageSizes = images.map((event) => event.byteSize).filter(Number.isFinite).sort((a, b) => a - b);
   const imageBytes = sum(imageSizes);
+  const usesV2ImagePolicy = Boolean(metadata.replay?.imagePolicy);
+  const v2ImageByteSizeMeasured = metadata.replay?.imagePolicy
+    ? images.every((event) => event.byteSizeSource === 'native')
+    : null;
+  const v2FallbackCount = images.filter((event) => event.byteSizeSource === 'frame_limit_estimate').length;
   const segmentBytes = sum(segments.map((event) => event.byteSize));
   const pointerRecords = sum(segments.map((event) => event.pointerRecordCount));
   const replayRequests = http.requests.filter((request) => request.path.includes('/rum/replay'));
+  const resourceRequests = http.requests.filter((request) => (
+    request.path.includes('/rum/replay_assets') && !request.path.includes('/check/')
+  ));
+  const segmentRequests = http.requests.filter((request) => request.path === '/v1/write/rum/replay');
   const replayHttpBodyBytes = sum(replayRequests.map((request) => request.bodyBytes));
+  const resourcePayloadAvailable = resourceRequests.some((request) => Number.isFinite(request.multipartFileBytes));
+  const resourcePayloadBytes = resourcePayloadAvailable
+    ? sum(resourceRequests.map((request) => request.multipartFileBytes))
+    : null;
+  const resourcePayloadCount = resourcePayloadAvailable
+    ? sum(resourceRequests.map((request) => request.multipartFileCount))
+    : null;
+  const segmentPayloadAvailable = segmentRequests.some((request) => Number.isFinite(request.multipartFileBytes));
+  const segmentPayloadBytes = segmentPayloadAvailable
+    ? sum(segmentRequests.map((request) => request.multipartFileBytes))
+    : null;
+  const multipartOverheadBytes = sum(replayRequests.map((request) => request.multipartOverheadBytes));
+  const replayAuxiliaryBodyBytes = sum(replayRequests
+    .filter((request) => !Number.isFinite(request.multipartFileBytes))
+    .map((request) => request.bodyBytes));
+  const httpProtocolOverheadBytes = multipartOverheadBytes + replayAuxiliaryBodyBytes;
+  const replayAccountedBytes = resourcePayloadAvailable && segmentPayloadAvailable
+    ? resourcePayloadBytes + segmentPayloadBytes + httpProtocolOverheadBytes
+    : null;
+  const imagePayloadDeltaBytes = usesV2ImagePolicy && resourcePayloadAvailable
+    ? resourcePayloadBytes - imageBytes
+    : null;
+  const imagePayloadRatio = usesV2ImagePolicy && resourcePayloadAvailable && imageBytes > 0
+    ? resourcePayloadBytes / imageBytes
+    : null;
   const skipCounts = Object.fromEntries(
     ['dedupe', 'approx_static', 'throttle', 'budget', 'busy', 'error']
       .map((reason) => [reason, skips.filter((event) => event.reason === reason).length]),
@@ -57,11 +91,24 @@ export function analyzeReplayTrafficRun(run) {
     durationSeconds: durationMs / 1000,
     imageBytes,
     imageBytesPerMinute: imageBytes / durationMinutes,
+    imageByteSizeSource: usesV2ImagePolicy ? 'native' : 'frame_limit_estimate',
     imageResourceCount: images.length,
     effectiveImagesPerMinute: images.length / durationMinutes,
     imageFrameP50: percentile(imageSizes, 0.5),
     imageFrameP95: percentile(imageSizes, 0.95),
     imageFrameMax: imageSizes[imageSizes.length - 1] || 0,
+    v2ImageByteSizeMeasured,
+    v2FallbackCount,
+    uploadedImageBytes: resourcePayloadBytes,
+    uploadedImageBytesPerMinute: Number.isFinite(resourcePayloadBytes)
+      ? resourcePayloadBytes / durationMinutes
+      : null,
+    uploadedImageCount: resourcePayloadCount,
+    imagePayloadDeltaBytes,
+    imagePayloadRatio,
+    imagePayloadReconciled: usesV2ImagePolicy && resourcePayloadAvailable
+      ? resourcePayloadBytes === imageBytes && resourcePayloadCount === images.length
+      : null,
     rollingImageBytesMax,
     imageBudgetBytes: budgetBytes,
     priorityAllowanceBytes: priorityAllowance,
@@ -76,6 +123,20 @@ export function analyzeReplayTrafficRun(run) {
     httpBodyBytesPerMinute: (http.bodyBytes || 0) / durationMinutes,
     replayHttpBodyBytes,
     replayHttpBodyBytesPerMinute: replayHttpBodyBytes / durationMinutes,
+    segmentPayloadBytes,
+    segmentPayloadBytesPerMinute: Number.isFinite(segmentPayloadBytes)
+      ? segmentPayloadBytes / durationMinutes
+      : null,
+    multipartOverheadBytes,
+    multipartOverheadBytesPerMinute: multipartOverheadBytes / durationMinutes,
+    replayAuxiliaryBodyBytes,
+    httpProtocolOverheadBytesPerMinute: httpProtocolOverheadBytes / durationMinutes,
+    replayHttpBodyDeltaBytes: Number.isFinite(replayAccountedBytes)
+      ? replayHttpBodyBytes - replayAccountedBytes
+      : null,
+    replayHttpBodyReconciled: Number.isFinite(replayAccountedBytes)
+      ? replayHttpBodyBytes === replayAccountedBytes
+      : null,
     connectionBytes: http.connectionBytes || 0,
     connectionBytesPerMinute: (http.connectionBytes || 0) / durationMinutes,
     requestCount: http.requestCount || 0,
@@ -105,6 +166,16 @@ export function aggregateReplayTrafficRuns(rows) {
     const image = metric('imageBytesPerMinute');
     const httpBody = metric('httpBodyBytesPerMinute');
     const connection = metric('connectionBytesPerMinute');
+    const uploadedImage = metric('uploadedImageBytesPerMinute');
+    const hasImagePayload = values.some((value) => Number.isFinite(value.uploadedImageBytes));
+    const reconciliationResults = values
+      .map((value) => value.imagePayloadReconciled)
+      .filter((value) => value !== null);
+    const httpAccountingResults = values
+      .map((value) => value.replayHttpBodyReconciled)
+      .filter((value) => value !== null);
+    const budgetResults = values.map((value) => value.imageBudgetPass).filter((value) => value !== null);
+    const v2Results = values.map((value) => value.v2ImageByteSizeMeasured).filter((value) => value !== null);
     return {
       platform: first.platform,
       deviceLabel: first.deviceLabel,
@@ -116,9 +187,30 @@ export function aggregateReplayTrafficRuns(rows) {
       imageBytesPerMinuteMax: image.max,
       imageBytesPerMinuteStdDev: image.stdDev,
       imageBytesPerMinuteCV: image.cv,
+      imageByteSizeSource: values.every((value) => value.imageByteSizeSource === first.imageByteSizeSource)
+        ? first.imageByteSizeSource
+        : 'mixed',
+      uploadedImageBytesPerMinuteMedian: hasImagePayload ? uploadedImage.median : null,
+      uploadedImageBytesPerMinuteMin: hasImagePayload ? uploadedImage.min : null,
+      uploadedImageBytesPerMinuteMax: hasImagePayload ? uploadedImage.max : null,
+      imagePayloadDeltaBytesMedian: reconciliationResults.length > 0
+        ? metric('imagePayloadDeltaBytes').median
+        : null,
+      imagePayloadRatioMedian: reconciliationResults.length > 0 ? metric('imagePayloadRatio').median : null,
+      imagePayloadReconciled: reconciliationResults.length > 0
+        ? reconciliationResults.every(Boolean)
+        : null,
+      v2ImageByteSizeMeasured: v2Results.length > 0 ? v2Results.every(Boolean) : null,
+      v2FallbackCountTotal: sum(values.map((value) => value.v2FallbackCount)),
       rollingImageBytesMax: Math.max(...values.map((value) => value.rollingImageBytesMax)),
-      imageBudgetPass: values.every((value) => value.imageBudgetPass !== false),
+      imageBudgetPass: budgetResults.length > 0 ? budgetResults.every(Boolean) : null,
       segmentBytesPerMinuteMedian: metric('segmentBytesPerMinute').median,
+      segmentPayloadBytesPerMinuteMedian: metric('segmentPayloadBytesPerMinute').median,
+      multipartOverheadBytesPerMinuteMedian: metric('multipartOverheadBytesPerMinute').median,
+      httpProtocolOverheadBytesPerMinuteMedian: metric('httpProtocolOverheadBytesPerMinute').median,
+      replayHttpBodyReconciled: httpAccountingResults.length > 0
+        ? httpAccountingResults.every(Boolean)
+        : null,
       pointerRecordsPerMinuteMedian: metric('pointerRecordsPerMinute').median,
       replayHttpBodyBytesPerMinuteMedian: metric('replayHttpBodyBytesPerMinute').median,
       httpBodyBytesPerMinuteMedian: httpBody.median,
@@ -206,16 +298,25 @@ function markdown(rows, groups) {
     '',
     'HTTP body bytes are the actual application request bodies received by the local data port. Connection bytes include HTTP request lines, headers, and bodies received by that port, but not TCP/IP framing.',
     '',
-    '| Platform | Device | Group | Scenario | Runs | Image/min median (range) | Rolling 60s max | Segment/min | Replay HTTP body/min | Connection/min | CV | Budget |',
-    '| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |',
+    '| Platform | Device | Group | Scenario | Runs | SDK image/min median (range) | SDK byte source | Uploaded image/min | Image payload ratio | Rolling 60s max | SDK segment/min | Uploaded segment/min | Protocol body overhead/min | Replay HTTP body/min | Connection/min | CV | Budget | Image reconciled | HTTP accounted |',
+    '| --- | --- | --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- |',
   ];
   for (const group of groups) {
-    lines.push(`| ${group.platform} | ${group.deviceLabel} | ${group.groupId} | ${group.scenario} | ${group.repetitions} | ${bytes(group.imageBytesPerMinuteMedian)} (${bytes(group.imageBytesPerMinuteMin)}–${bytes(group.imageBytesPerMinuteMax)}) | ${bytes(group.rollingImageBytesMax)} | ${bytes(group.segmentBytesPerMinuteMedian)} | ${bytes(group.replayHttpBodyBytesPerMinuteMedian)} | ${bytes(group.connectionBytesPerMinuteMedian)} | ${ratio(group.imageBytesPerMinuteCV)} | ${group.imageBudgetPass ? 'PASS' : 'FAIL'} |`);
+    const reconciled = group.imagePayloadReconciled === null ? 'n/a' : group.imagePayloadReconciled ? 'PASS' : 'FAIL';
+    const budget = group.imageBudgetPass === null ? 'n/a' : group.imageBudgetPass ? 'PASS' : 'FAIL';
+    const httpAccounted = group.replayHttpBodyReconciled === null
+      ? 'n/a'
+      : group.replayHttpBodyReconciled ? 'PASS' : 'FAIL';
+    lines.push(`| ${group.platform} | ${group.deviceLabel} | ${group.groupId} | ${group.scenario} | ${group.repetitions} | ${bytes(group.imageBytesPerMinuteMedian)} (${bytes(group.imageBytesPerMinuteMin)}–${bytes(group.imageBytesPerMinuteMax)}) | ${group.imageByteSizeSource} | ${bytes(group.uploadedImageBytesPerMinuteMedian)} | ${ratio(group.imagePayloadRatioMedian)} | ${bytes(group.rollingImageBytesMax)} | ${bytes(group.segmentBytesPerMinuteMedian)} | ${bytes(group.segmentPayloadBytesPerMinuteMedian)} | ${bytes(group.httpProtocolOverheadBytesPerMinuteMedian)} | ${bytes(group.replayHttpBodyBytesPerMinuteMedian)} | ${bytes(group.connectionBytesPerMinuteMedian)} | ${ratio(group.imageBytesPerMinuteCV)} | ${budget} | ${reconciled} | ${httpAccounted} |`);
   }
   lines.push('', '## Run validity', '');
-  const invalid = rows.filter((row) => row.skippedError > 0 || row.retryCount > 0 || row.imageBudgetPass === false);
-  if (invalid.length === 0) lines.push('No SDK capture errors, HTTP retries, or image-budget failures were detected.');
-  else for (const row of invalid) lines.push(`- ${row.runId}: errors=${row.skippedError}, retries=${row.retryCount}, budget=${row.imageBudgetPass}`);
+  const invalid = rows.filter((row) => (
+    row.skippedError > 0 || row.retryCount > 0 || row.imageBudgetPass === false
+    || row.imagePayloadReconciled === false || row.v2ImageByteSizeMeasured === false
+    || row.replayHttpBodyReconciled === false
+  ));
+  if (invalid.length === 0) lines.push('No SDK capture errors, HTTP retries, image-budget failures, image-payload reconciliation failures, or HTTP accounting gaps were detected.');
+  else for (const row of invalid) lines.push(`- ${row.runId}: errors=${row.skippedError}, retries=${row.retryCount}, budget=${row.imageBudgetPass}, imageReconciled=${row.imagePayloadReconciled}, httpAccounted=${row.replayHttpBodyReconciled}, v2Measured=${row.v2ImageByteSizeMeasured}`);
   lines.push('');
   return `${lines.join('\n')}\n`;
 }

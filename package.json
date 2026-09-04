@@ -28,6 +28,7 @@
     "replay-traffic:configure": "node scripts/configure-replay-traffic-benchmark.mjs",
     "replay-traffic:capture": "node scripts/replay-traffic-capture-server.mjs",
     "replay-traffic:run": "node scripts/run-replay-traffic-benchmark.mjs",
+    "replay-traffic:matrix": "node scripts/run-replay-traffic-matrix.mjs",
     "replay-traffic:report": "node scripts/report-replay-traffic-benchmark.mjs",
     "pack": "npm run build && node scripts/pack.mjs"
   },

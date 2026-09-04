@@ -8,7 +8,8 @@ import { buildReplayTrafficRunConfig } from './replay-traffic-benchmark-config.m
 
 const execFileAsync = promisify(execFile);
 const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
-const controlUrl = (readOption('--control-url', 'http://127.0.0.1:9530')).replace(/\/$/, '');
+const controlUrl = (readOption('--control-url', 'http://127.0.0.1:19530')).replace(/\/$/, '');
+const dataPort = readOption('--data-port', '19529');
 const platform = readRequired('--platform');
 const groupId = readRequired('--group');
 const scenario = readRequired('--scenario');
@@ -17,6 +18,8 @@ const deviceLabel = readOption('--device-label', `${platform}-reference`);
 const runId = readOption('--run-id', defaultRunId(platform, deviceLabel, groupId, scenario, repeat));
 const applicationId = readOption('--application-id', 'com.cloudcare.sample.cocos.hybrid.creator3');
 const metadata = await repositoryMetadata(platform);
+pinMatrixCommit(metadata, 'cocosSdkCommit', '--cocos-sdk-commit');
+pinMatrixCommit(metadata, 'nativeSdkCommit', '--native-sdk-commit');
 const config = buildReplayTrafficRunConfig({
   runId,
   platform,
@@ -25,6 +28,10 @@ const config = buildReplayTrafficRunConfig({
   scenario,
   repeat,
   metadata,
+  warmupSeconds: readOptionalNumber('--warmup-seconds'),
+  measurementSeconds: readOptionalNumber('--measurement-seconds'),
+  quietPeriodSeconds: readOptionalNumber('--quiet-period-seconds'),
+  flushTimeoutSeconds: readOptionalNumber('--flush-timeout-seconds'),
 });
 
 await request('/health');
@@ -33,8 +40,9 @@ await request('/config', { method: 'PUT', body: config });
 let androidNetworkStart;
 let androidUid;
 if (platform === 'android') {
-  await adb('reverse', 'tcp:9529', 'tcp:9529');
-  await adb('reverse', 'tcp:9530', 'tcp:9530');
+  const controlPort = new URL(controlUrl).port || '80';
+  await adb('reverse', `tcp:${dataPort}`, `tcp:${dataPort}`);
+  await adb('reverse', `tcp:${controlPort}`, `tcp:${controlPort}`);
   const model = clean(await adb('shell', 'getprop', 'ro.product.model'));
   const osVersion = clean(await adb('shell', 'getprop', 'ro.build.version.release'));
   const screen = clean(await adb('shell', 'wm', 'size'));
@@ -45,7 +53,13 @@ if (platform === 'android') {
   await adb('shell', 'am', 'start', '-n', `${applicationId}/com.cocos.game.AppActivity`);
 } else if (platform === 'ios') {
   const deviceId = readOption('--device-id');
-  if (deviceId) {
+  const simulatorId = readOption('--simulator-id');
+  if (deviceId && simulatorId) throw new TypeError('Pass only one of --device-id or --simulator-id');
+  if (simulatorId) {
+    await execFileAsync('xcrun', [
+      'simctl', 'launch', '--terminate-running-process', simulatorId, applicationId,
+    ], { maxBuffer: 1024 * 1024 });
+  } else if (deviceId) {
     await execFileAsync('xcrun', [
       'devicectl', 'device', 'process', 'launch', '--terminate-existing',
       '--device', deviceId, applicationId,
@@ -156,6 +170,15 @@ function clean(value) {
   return String(value || '').trim();
 }
 
+function pinMatrixCommit(metadata, field, option) {
+  const pinned = readOption(option);
+  if (!pinned) return;
+  const observedField = `runnerObserved${field[0].toUpperCase()}${field.slice(1)}`;
+  metadata[observedField] = metadata[field];
+  metadata[field] = pinned;
+  metadata.commitPinnedAtMatrixStart = true;
+}
+
 function readRequired(name) {
   const value = readOption(name);
   if (!value) throw new TypeError(`${name} is required`);
@@ -168,6 +191,11 @@ function readOption(name, fallback) {
   if (inline) return inline.slice(prefix.length);
   const index = process.argv.indexOf(name);
   return index >= 0 ? process.argv[index + 1] : fallback;
+}
+
+function readOptionalNumber(name) {
+  const value = readOption(name);
+  return value === undefined ? undefined : Number(value);
 }
 
 function delay(milliseconds) {

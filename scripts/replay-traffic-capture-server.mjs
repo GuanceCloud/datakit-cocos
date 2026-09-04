@@ -13,30 +13,39 @@ const MAX_DATA_BODY_BYTES = 128 * 1024 * 1024;
 
 export function createReplayTrafficCaptureServer(options = {}) {
   const host = options.host || '0.0.0.0';
-  const dataPort = numberOption(options.dataPort, 9529);
-  const controlPort = numberOption(options.controlPort, 9530);
+  const dataPort = numberOption(options.dataPort, 19529);
+  const controlPort = numberOption(options.controlPort, 19530);
   const resultsRoot = path.resolve(options.resultsRoot || DEFAULT_RESULTS_ROOT);
   let configuredRun;
   let activeRun;
   let lastCompletedRun;
+  let lastDataAt;
+  let dataRequestCount = 0;
+  let dataBodyBytes = 0;
 
   const dataServer = http.createServer(async (request, response) => {
     const receivedAt = Date.now();
     try {
       const body = await readBody(request, MAX_DATA_BODY_BYTES);
+      lastDataAt = Date.now();
+      dataRequestCount += 1;
+      dataBodyBytes += body.length;
       if (activeRun) {
+        const contentType = headerValue(request.headers['content-type']);
+        const contentEncoding = headerValue(request.headers['content-encoding'])?.toLowerCase();
         const requestRecord = {
           timestamp: receivedAt,
           method: request.method || 'UNKNOWN',
           path: safePath(request.url),
-          contentType: headerValue(request.headers['content-type']),
-          contentEncoding: headerValue(request.headers['content-encoding']),
+          contentType,
+          contentEncoding,
           bodyBytes: body.length,
           bodySha256: createHash('sha256').update(body).digest('hex'),
+          ...multipartSummary(body, contentType),
         };
         activeRun.requests.push(requestRecord);
         activeRun.bodyBytes += body.length;
-        activeRun.lastDataAt = Date.now();
+        activeRun.lastDataAt = lastDataAt;
       }
 
       if (safePath(request.url) === '/v1/check/rum/replay_assets') {
@@ -108,7 +117,14 @@ export function createReplayTrafficCaptureServer(options = {}) {
         return json(response, 200, { ok: true, ...completed });
       }
       if (request.method === 'GET' && route === '/status') {
-        return json(response, 200, statusSnapshot(activeRun, configuredRun, lastCompletedRun));
+        return json(response, 200, statusSnapshot(
+          activeRun,
+          configuredRun,
+          lastCompletedRun,
+          lastDataAt,
+          dataRequestCount,
+          dataBodyBytes,
+        ));
       }
       return json(response, 404, { error: 'not found' });
     } catch (error) {
@@ -146,7 +162,7 @@ export function createReplayTrafficCaptureServer(options = {}) {
   };
 }
 
-function statusSnapshot(activeRun, configuredRun, lastCompletedRun) {
+function statusSnapshot(activeRun, configuredRun, lastCompletedRun, lastDataAt, dataRequestCount, dataBodyBytes) {
   if (activeRun) {
     return {
       state: 'running',
@@ -160,7 +176,16 @@ function statusSnapshot(activeRun, configuredRun, lastCompletedRun) {
       sdkEventCount: activeRun.sdkEvents.length,
     };
   }
-  if (configuredRun) return { state: 'configured', runId: configuredRun.runId };
+  if (configuredRun) {
+    return {
+      state: 'configured',
+      runId: configuredRun.runId,
+      lastDataAt,
+      quietForMs: lastDataAt ? Date.now() - lastDataAt : null,
+      requestCount: dataRequestCount,
+      bodyBytes: dataBodyBytes,
+    };
+  }
   if (lastCompletedRun) return { state: 'completed', ...lastCompletedRun };
   return { state: 'idle' };
 }
@@ -182,6 +207,7 @@ async function persistRun(run, marker, resultsRoot) {
   const requests = run.requests.map((request, index) => ({ sequence: index + 1, ...request }));
   const duplicateCounts = new Map();
   for (const request of requests) {
+    if (request.bodyBytes === 0) continue;
     const key = `${request.method}\n${request.path}\n${request.bodySha256}`;
     duplicateCounts.set(key, (duplicateCounts.get(key) || 0) + 1);
   }
@@ -209,7 +235,7 @@ function validateDiagnosticEvent(value) {
 }
 
 function replayCheckFiles(body, encodingHeader) {
-  const decoded = decodeBody(body, headerValue(encodingHeader));
+  const decoded = decodeBody(body, headerValue(encodingHeader)?.toLowerCase());
   const value = JSON.parse(decoded.toString('utf8'));
   return Array.isArray(value?.files)
     ? value.files.filter((file) => typeof file === 'string' && file.length > 0)
@@ -257,7 +283,49 @@ function safePath(url) {
 
 function headerValue(value) {
   if (Array.isArray(value)) return value.join(', ');
-  return typeof value === 'string' ? value.toLowerCase() : undefined;
+  return typeof value === 'string' ? value : undefined;
+}
+
+function multipartSummary(body, contentType) {
+  if (!contentType?.toLowerCase().startsWith('multipart/form-data')) return {};
+  const match = contentType.match(/(?:^|;)\s*boundary=(?:"([^"]+)"|([^;\s]+))/i);
+  const boundary = match?.[1] || match?.[2];
+  if (!boundary || boundary.length > 200) return {};
+
+  const delimiter = Buffer.from(`--${boundary}`);
+  const nextDelimiter = Buffer.from(`\r\n--${boundary}`);
+  const headerTerminator = Buffer.from('\r\n\r\n');
+  let cursor = body.indexOf(delimiter);
+  let multipartFileCount = 0;
+  let multipartFileBytes = 0;
+  let multipartFieldCount = 0;
+
+  while (cursor >= 0) {
+    cursor += delimiter.length;
+    if (body.subarray(cursor, cursor + 2).equals(Buffer.from('--'))) break;
+    if (body.subarray(cursor, cursor + 2).equals(Buffer.from('\r\n'))) cursor += 2;
+    const headerEnd = body.indexOf(headerTerminator, cursor);
+    if (headerEnd < 0) return {};
+    const payloadStart = headerEnd + headerTerminator.length;
+    const payloadEnd = body.indexOf(nextDelimiter, payloadStart);
+    if (payloadEnd < 0) return {};
+    const headers = body.subarray(cursor, headerEnd).toString('latin1');
+    const disposition = headers.match(/^content-disposition:[^\r\n]*$/im)?.[0] || '';
+    if (/;\s*filename\s*=/i.test(disposition)) {
+      multipartFileCount += 1;
+      multipartFileBytes += payloadEnd - payloadStart;
+    } else {
+      multipartFieldCount += 1;
+    }
+    cursor = payloadEnd + 2;
+  }
+
+  return {
+    multipartFileCount,
+    multipartFileBytes,
+    multipartFieldCount,
+    multipartOverheadBytes: body.length - multipartFileBytes,
+  };
 }
 
 function badRequest(message) {
@@ -324,8 +392,8 @@ function readOption(name, fallback) {
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const server = createReplayTrafficCaptureServer({
     host: readOption('--host', '0.0.0.0'),
-    dataPort: readOption('--data-port', '9529'),
-    controlPort: readOption('--control-port', '9530'),
+    dataPort: readOption('--data-port', '19529'),
+    controlPort: readOption('--control-port', '19530'),
     resultsRoot: readOption('--results-root', DEFAULT_RESULTS_ROOT),
   });
   const address = await server.listen();

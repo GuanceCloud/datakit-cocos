@@ -94,6 +94,13 @@ describe('Replay Traffic capture server', () => {
     });
     try {
       await jsonRequest(`${control}/config`, 'PUT', config);
+      await jsonRequest(`${data}/v1/write/rum/replay`, 'POST', { prewarm: true });
+      const configured = await jsonRequest(`${control}/status`, 'GET');
+      expect(configured.state).toBe('configured');
+      expect(configured.lastDataAt).toEqual(expect.any(Number));
+      expect(configured.quietForMs).toEqual(expect.any(Number));
+      expect(configured.bodyBytes).toBeGreaterThan(0);
+      expect(configured.requestCount).toBe(1);
       await jsonRequest(`${control}/runs/start`, 'POST', { runId: config.runId });
       const check = await jsonRequest(`${data}/v1/check/rum/replay_assets`, 'POST', {
         app_id: 'local-test',
@@ -102,18 +109,31 @@ describe('Replay Traffic capture server', () => {
       expect(check.content).toEqual({ 'resource-a.webp': false, 'resource-b.webp': false });
       await jsonRequest(`${data}/v1/write/rum/replay`, 'POST', { segment: 'synthetic' });
       await jsonRequest(`${data}/v1/write/rum/replay`, 'POST', { segment: 'synthetic' });
+      await jsonRequest(`${data}/v1/datakit/pull`, 'POST');
+      await jsonRequest(`${data}/v1/datakit/pull`, 'POST');
+      await multipartRequest(`${data}/v1/write/rum/replay_assets`, {
+        filename: 'private-resource-name.webp',
+        payload: Buffer.from('private-resource-payload'),
+      });
       await jsonRequest(`${control}/runs/${config.runId}/events`, 'POST', {
         events: [{ type: 'image_saved', timestamp: Date.now(), byteSize: 1024 }],
       });
       const stopped = await jsonRequest(`${control}/runs/${config.runId}/stop`, 'POST', {});
       const httpSource = await readFile(path.join(stopped.resultDirectory, 'http.json'), 'utf8');
       const httpStats = JSON.parse(httpSource);
-      expect(httpStats.requestCount).toBe(3);
+      expect(httpStats.requestCount).toBe(6);
       expect(httpStats.retryCount).toBe(1);
       expect(httpStats.bodyBytes).toBeGreaterThan(0);
       expect(httpStats.connectionBytes).toBeGreaterThan(httpStats.bodyBytes);
       expect(httpSource).not.toContain('synthetic');
       expect(httpSource).not.toContain('local-test');
+      expect(httpSource).not.toContain('private-resource-name');
+      expect(httpSource).not.toContain('private-resource-payload');
+      expect(httpStats.requests.at(-1)).toMatchObject({
+        multipartFileCount: 1,
+        multipartFileBytes: Buffer.byteLength('private-resource-payload'),
+        multipartFieldCount: 1,
+      });
     } finally {
       await server.close();
     }
@@ -129,14 +149,25 @@ describe('Replay Traffic report', () => {
         replay: { imagePolicy: { quality: 'medium' } },
       },
       events: [
-        { type: 'image_saved', timestamp: 1_000, byteSize: 10_000, priority: true },
-        { type: 'image_saved', timestamp: 30_000, byteSize: 20_000, priority: false },
+        { type: 'image_saved', timestamp: 1_000, byteSize: 10_000, priority: true, byteSizeSource: 'native' },
+        { type: 'image_saved', timestamp: 30_000, byteSize: 20_000, priority: false, byteSizeSource: 'native' },
         { type: 'segment_encoded', timestamp: 30_000, byteSize: 500, pointerRecordCount: 2 },
         { type: 'capture_skipped', timestamp: 31_000, reason: 'throttle' },
       ],
       http: {
-        requestCount: 1, retryCount: 0, bodyBytes: 35_000, connectionBytes: 36_000,
-        requests: [{ path: '/v1/write/rum/replay', bodyBytes: 35_000 }],
+        requestCount: 2, retryCount: 0, bodyBytes: 35_000, connectionBytes: 36_000,
+        requests: [
+          {
+            path: '/v1/write/rum/replay_assets', bodyBytes: 31_000,
+            multipartFileCount: 2, multipartFileBytes: 30_000, multipartFieldCount: 1,
+            multipartOverheadBytes: 1_000,
+          },
+          {
+            path: '/v1/write/rum/replay', bodyBytes: 4_000,
+            multipartFileCount: 1, multipartFileBytes: 500, multipartFieldCount: 1,
+            multipartOverheadBytes: 3_500,
+          },
+        ],
       },
     });
     expect(run.imageBytesPerMinute).toBe(30_000);
@@ -145,10 +176,54 @@ describe('Replay Traffic report', () => {
     expect(run.pointerRecordsPerMinute).toBe(2);
     expect(run.skippedThrottle).toBe(1);
     expect(run.imageBudgetPass).toBe(true);
+    expect(run.v2ImageByteSizeMeasured).toBe(true);
+    expect(run.uploadedImageBytes).toBe(30_000);
+    expect(run.uploadedImageBytesPerMinute).toBe(30_000);
+    expect(run.uploadedImageCount).toBe(2);
+    expect(run.imagePayloadDeltaBytes).toBe(0);
+    expect(run.imagePayloadReconciled).toBe(true);
+    expect(run.segmentPayloadBytesPerMinute).toBe(500);
+    expect(run.multipartOverheadBytesPerMinute).toBe(4_500);
+    expect(run.httpProtocolOverheadBytesPerMinute).toBe(4_500);
+    expect(run.replayHttpBodyDeltaBytes).toBe(0);
+    expect(run.replayHttpBodyReconciled).toBe(true);
     const group = aggregateReplayTrafficRuns([run, { ...run, repeat: 2, imageBytesPerMinute: 33_000 }])[0];
     expect(group.repetitions).toBe(2);
     expect(group.imageBytesPerMinuteMedian).toBe(31_500);
     expect(group.imageBytesPerMinuteCV).toBeGreaterThan(0);
+    expect(group.replayHttpBodyReconciled).toBe(true);
+  });
+
+  it('uses HTTP resource payload as the real legacy baseline without claiming V2 reconciliation', () => {
+    const run = analyzeReplayTrafficRun({
+      metadata: {
+        runId: 'legacy-run', platform: 'android', deviceLabel: 'device', groupId: 'LEGACY-1',
+        scenario: 'FULL-MOTION', repeat: 1, measurementMs: 120_000,
+        replay: { captureFps: 1, maxImageDimension: 720 },
+      },
+      events: [
+        { type: 'image_saved', timestamp: 1_000, byteSize: 40_960, byteSizeSource: 'frame_limit_estimate' },
+      ],
+      http: {
+        requestCount: 1, retryCount: 0, bodyBytes: 11_000, connectionBytes: 12_000,
+        requests: [{
+          path: '/v1/write/rum/replay_assets', bodyBytes: 11_000,
+          multipartFileCount: 1, multipartFileBytes: 10_000, multipartFieldCount: 1,
+          multipartOverheadBytes: 1_000,
+        }],
+      },
+    });
+    expect(run.imageByteSizeSource).toBe('frame_limit_estimate');
+    expect(run.uploadedImageBytesPerMinute).toBe(5_000);
+    expect(run.imagePayloadRatio).toBeNull();
+    expect(run.imagePayloadReconciled).toBeNull();
+    expect(run.replayHttpBodyReconciled).toBeNull();
+    expect(run.imageBudgetPass).toBeNull();
+    const group = aggregateReplayTrafficRuns([run])[0];
+    expect(group.imageBudgetPass).toBeNull();
+    expect(group.imagePayloadReconciled).toBeNull();
+    expect(group.v2ImageByteSizeMeasured).toBeNull();
+    expect(group.replayHttpBodyReconciled).toBeNull();
   });
 });
 
@@ -160,5 +235,23 @@ async function jsonRequest(url: string, method: string, body?: unknown): Promise
   });
   const value = await response.json();
   if (!response.ok) throw new Error(`${method} ${url}: ${JSON.stringify(value)}`);
+  return value;
+}
+
+async function multipartRequest(url: string, file: { filename: string; payload: Buffer }): Promise<any> {
+  const boundary = 'ReplayTrafficBoundaryCaseSensitive';
+  const body = Buffer.concat([
+    Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="app_id"\r\n\r\nlocal-test\r\n`),
+    Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${file.filename}"\r\nContent-Type: image/webp\r\n\r\n`),
+    file.payload,
+    Buffer.from(`\r\n--${boundary}--\r\n`),
+  ]);
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': `multipart/form-data; boundary="${boundary}"` },
+    body,
+  });
+  const value = await response.json();
+  if (!response.ok) throw new Error(`POST ${url}: ${JSON.stringify(value)}`);
   return value;
 }

@@ -17,6 +17,7 @@ export type FTReplayDiagnosticEvent =
     height: number;
     mimeType?: string;
     priority: boolean;
+    byteSizeSource: 'native' | 'frame_limit_estimate';
   }
   | {
     type: 'segment_encoded';

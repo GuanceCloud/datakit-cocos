@@ -22,10 +22,14 @@ const ANDROID_MANIFEST_BEGIN = '<!-- COCOS_HYBRID_NATIVE_PAGE_BEGIN -->';
 const ANDROID_MANIFEST_END = '<!-- COCOS_HYBRID_NATIVE_PAGE_END -->';
 const FT_PLUGIN_BEGIN = '/* COCOS_HYBRID_FT_PLUGIN_CLASSPATH_BEGIN */';
 const FT_PLUGIN_END = '/* COCOS_HYBRID_FT_PLUGIN_CLASSPATH_END */';
+const IOS_LOCAL_NETWORK_BEGIN = '<!-- COCOS_REPLAY_BENCHMARK_LOCAL_NETWORK_BEGIN -->';
+const IOS_LOCAL_NETWORK_END = '<!-- COCOS_REPLAY_BENCHMARK_LOCAL_NETWORK_END -->';
 
 const projectRoot = path.resolve(readOption('--project') || process.cwd());
 const creator = readCreator();
 const buildRootValue = readOption('--build-root');
+const androidSdkRootValue = readOption('--android-sdk-root') || process.env.FT_ANDROID_SDK_ROOT;
+const androidSdkRoot = androidSdkRootValue ? path.resolve(projectRoot, androidSdkRootValue) : undefined;
 
 if (!buildRootValue) fail('Pass the generated native directory with --build-root.');
 const buildRoot = path.resolve(projectRoot, buildRootValue);
@@ -80,14 +84,22 @@ const appActivities = files.filter((file) => path.basename(file) === 'AppActivit
 const androidManifests = files.filter((file) => /(?:^|\/)app\/AndroidManifest\.xml$/.test(normalize(file)));
 const podfiles = files.filter((file) => path.basename(file) === 'Podfile');
 const iosLaunchFiles = files.filter((file) => ['AppDelegate.mm', 'AppController.mm'].includes(path.basename(file)));
+const iosInfoPlists = files.filter((file) => (
+  path.basename(file) === 'Info.plist'
+  && !normalize(file).includes('/CMakeFiles/')
+  && readFileSync(file, 'utf8').includes('<key>CFBundleIdentifier</key>')
+));
 
 gradleFiles.forEach((file) => patchGradle(file, path.join(nativeHostBuild, 'android')));
-if (replayBenchmarkEnabled) gradleFiles.forEach(patchLocalBenchmarkAndroidDependencies);
+if (replayBenchmarkEnabled) {
+  gradleFiles.forEach((file) => patchLocalBenchmarkAndroidDependencies(file, androidSdkRoot));
+}
 appActivities.forEach(patchAndroidLaunch);
 rootGradleFiles.forEach(patchFTPluginClasspath);
 androidManifests.forEach((file) => patchAndroidManifest(file, creator));
 podfiles.forEach((file) => patchPodfile(file, path.join(nativeHostBuild, 'ios')));
 iosLaunchFiles.forEach(patchIOSLaunch);
+if (replayBenchmarkEnabled) iosInfoPlists.forEach(patchIOSLocalNetworkUsage);
 
 if (gradleFiles.length === 0 && podfiles.length === 0) {
   fail('No Android app/build.gradle or iOS Podfile was found. Build a native platform in Creator first.');
@@ -151,12 +163,22 @@ function patchGradle(file, androidHostRoot) {
   replaceMarkedBlock(file, ANDROID_BEGIN, ANDROID_END, block.join('\n'));
 }
 
-function patchLocalBenchmarkAndroidDependencies(file) {
+function patchLocalBenchmarkAndroidDependencies(file, sdkRoot) {
   const applicationDirectory = path.dirname(file);
   const localSdk = path.join(applicationDirectory, 'libs/ft-sdk-debug.aar');
   const localReplay = path.join(applicationDirectory, 'libs/ft-session-replay-debug.aar');
+  if (sdkRoot) {
+    const builtSdk = path.join(sdkRoot, 'ft-sdk/build/outputs/aar/ft-sdk-debug.aar');
+    const builtReplay = path.join(sdkRoot, 'ft-session-replay/build/outputs/aar/ft-session-replay-debug.aar');
+    if (!existsSync(builtSdk) || !existsSync(builtReplay)) {
+      fail(`Built Android benchmark AARs were not found under ${sdkRoot}`);
+    }
+    mkdirSync(path.dirname(localSdk), { recursive: true });
+    copyFileSync(builtSdk, localSdk);
+    copyFileSync(builtReplay, localReplay);
+  }
   if (!existsSync(localSdk) || !existsSync(localReplay)) {
-    fail('Replay Traffic Benchmark requires local ft-sdk-debug.aar and ft-session-replay-debug.aar');
+    fail('Replay Traffic Benchmark requires local debug AARs; pass --android-sdk-root after building them');
   }
   const source = readFileSync(file, 'utf8');
   const next = source
@@ -319,6 +341,19 @@ function patchIOSLaunch(file) {
     source = `${source.slice(0, methodBody + 1)}\n    ${block.replace(/\n/g, '\n    ')}${source.slice(methodBody + 1)}`;
   }
   writeFileSync(file, source);
+}
+
+function patchIOSLocalNetworkUsage(file) {
+  const source = readFileSync(file, 'utf8');
+  if (source.includes('<key>NSLocalNetworkUsageDescription</key>')) return;
+  const block = [
+    IOS_LOCAL_NETWORK_BEGIN,
+    '\t<key>NSLocalNetworkUsageDescription</key>',
+    '\t<string>Sends isolated Session Replay benchmark traffic to the developer machine.</string>',
+    IOS_LOCAL_NETWORK_END,
+  ].join('\n');
+  if (!source.includes('</dict>')) fail(`Unable to locate the root dictionary in ${file}`);
+  writeFileSync(file, source.replace(/<\/dict>\s*<\/plist>\s*$/, `${block}\n</dict>\n</plist>\n`));
 }
 
 function replaceMarkedBlock(file, begin, end, block) {

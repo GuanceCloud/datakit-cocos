@@ -99,6 +99,9 @@ class ReplayTrafficBenchmarkRuntime {
       this.startLoad(config);
       this.setStatus(`WARMUP · ${config.warmupMs / 1000}s`, new Color(245, 166, 35, 255));
       await this.delay(config.warmupMs);
+      this.stopLoad();
+      this.setStatus('DRAINING PREWARM QUEUE', new Color(245, 166, 35, 255));
+      await this.drainNativeQueue(config.quietPeriodMs, config.flushTimeoutMs);
       prepareNativeBenchmark(config);
       await this.request('POST', '/runs/start', { runId: config.runId });
       (globalThis as BenchmarkGlobal).__FT_COCOS_REPLAY_BENCHMARK_OBSERVER__ = (event) => {
@@ -109,6 +112,7 @@ class ReplayTrafficBenchmarkRuntime {
         autoTrack: { scenes: false, actions: false, errors: false, console: false, network: false },
       });
       guanceSdk.enterCocos({ viewName: VIEW_NAME });
+      this.startLoad(config);
       this.startTouches(config);
       this.setStatus(`MEASURING · ${config.measurementMs / 1000}s`, new Color(44, 202, 178, 255));
       await this.delay(config.measurementMs);
@@ -122,20 +126,13 @@ class ReplayTrafficBenchmarkRuntime {
   private async stopAndFlush(config: ReplayTrafficRunConfig): Promise<void> {
     if (this.touchTimer !== undefined) clearInterval(this.touchTimer);
     this.touchTimer = undefined;
+    this.stopLoad();
     guanceSdk.leaveCocos();
     const flushRequestedAt = Date.now();
     this.diagnosticEvents.push({ type: 'flush_requested', timestamp: flushRequestedAt });
-    flushNativeBenchmark();
     this.setStatus('FLUSHING · waiting for 10s quiet', new Color(73, 142, 245, 255));
 
-    const deadline = flushRequestedAt + config.flushTimeoutMs;
-    let lastUploadAt = flushRequestedAt;
-    while (Date.now() < deadline) {
-      const status = await this.request<{ lastDataAt?: number }>('GET', '/status');
-      if (Number.isFinite(status.lastDataAt)) lastUploadAt = Math.max(lastUploadAt, status.lastDataAt!);
-      if (Date.now() - lastUploadAt >= config.quietPeriodMs) break;
-      await this.delay(1000);
-    }
+    await this.drainNativeQueue(config.quietPeriodMs, config.flushTimeoutMs);
 
     await this.request('POST', `/runs/${encodeURIComponent(config.runId)}/events`, {
       events: this.diagnosticEvents,
@@ -151,6 +148,24 @@ class ReplayTrafficBenchmarkRuntime {
       },
     );
     this.setStatus(`COMPLETE · ${stopped.resultDirectory}`, new Color(44, 202, 178, 255));
+  }
+
+  private async waitForQuiet(startedAt: number, quietPeriodMs: number, timeoutMs: number): Promise<void> {
+    const deadline = startedAt + timeoutMs;
+    let lastUploadAt = startedAt;
+    while (Date.now() < deadline) {
+      const status = await this.request<{ lastDataAt?: number }>('GET', '/status');
+      if (Number.isFinite(status.lastDataAt)) lastUploadAt = Math.max(lastUploadAt, status.lastDataAt!);
+      if (Date.now() - lastUploadAt >= quietPeriodMs) return;
+      await this.delay(1000);
+    }
+    throw new Error(`Traffic did not become quiet within ${timeoutMs / 1000}s`);
+  }
+
+  private async drainNativeQueue(quietPeriodMs: number, timeoutMs: number): Promise<void> {
+    const flushStartedAt = Date.now();
+    flushNativeBenchmark();
+    await this.waitForQuiet(flushStartedAt, quietPeriodMs, timeoutMs);
   }
 
   private createScene(config: ReplayTrafficRunConfig): { root: Node; camera: Camera } {
@@ -219,6 +234,11 @@ class ReplayTrafficBenchmarkRuntime {
       this.frame += 1;
       this.drawLoad(config);
     }, interval);
+  }
+
+  private stopLoad(): void {
+    if (this.loadTimer !== undefined) clearInterval(this.loadTimer);
+    this.loadTimer = undefined;
   }
 
   private drawLoad(config: ReplayTrafficRunConfig): void {
