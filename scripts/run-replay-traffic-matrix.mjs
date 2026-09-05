@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import { resolveNativeSdkRoot } from './replay-traffic-local-config.mjs';
 
 const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const runner = path.join(root, 'scripts', 'run-replay-traffic-benchmark.mjs');
@@ -11,9 +12,11 @@ const repeats = positiveInteger(readOption('--repeats', '3'), '--repeats');
 const deviceLabel = readOption('--device-label', `${platform}-emulator`);
 const runPrefix = readOption('--run-prefix', `${platform}-matrix`);
 const resultsRoot = readOption('--results-root');
-const nativeRoot = platform === 'android'
-  ? path.resolve(root, '..', 'ft-sdk-android')
-  : path.resolve(root, '..', 'ft-sdk-ios');
+const nativeRoot = resolveNativeSdkRoot({
+  platform,
+  workspaceRoot: root,
+  optionValue: readOption('--native-sdk-root'),
+});
 const cocosSdkCommit = gitCommit(root);
 const nativeSdkCommit = gitCommit(nativeRoot);
 const passthrough = [
@@ -61,6 +64,7 @@ for (const { group, scenario } of matrix) {
       '--run-id', runId,
       '--cocos-sdk-commit', cocosSdkCommit,
       '--native-sdk-commit', nativeSdkCommit,
+      '--native-sdk-root', nativeRoot,
       ...passthrough,
     ]);
     completed += 1;

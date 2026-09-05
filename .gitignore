@@ -7,6 +7,11 @@
 /.idea/
 *.iml
 
+# Machine-local environment files. Commit only sanitized *.example templates.
+.env
+.env.*
+!.env.example
+
 # Generated from SAMPLE_* environment variables; may contain credentials.
 *.generated.ts*
 /examples/native-host/android/HybridSampleEnvironment.java

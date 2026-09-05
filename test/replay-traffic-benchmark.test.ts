@@ -6,6 +6,7 @@ import {
   buildReplayTrafficRunConfig,
   REPLAY_TRAFFIC_GROUPS,
 } from '../scripts/replay-traffic-benchmark-config.mjs';
+import { resolveNativeSdkRoot } from '../scripts/replay-traffic-local-config.mjs';
 import { createReplayTrafficCaptureServer } from '../scripts/replay-traffic-capture-server.mjs';
 import {
   analyzeReplayTrafficRun,
@@ -14,6 +15,25 @@ import {
 import { emitReplayDiagnostic, replayUtf8ByteLength } from '../src/core/replay-diagnostics.js';
 
 describe('Replay Traffic Benchmark configuration', () => {
+  it('keeps native SDK locations in local environment configuration', () => {
+    expect(resolveNativeSdkRoot({
+      platform: 'android',
+      workspaceRoot: '/workspace/ft-sdk-cocos',
+      environment: { REPLAY_TRAFFIC_ANDROID_SDK_ROOT: '../native/android-sdk' },
+    })).toBe('/workspace/native/android-sdk');
+    expect(resolveNativeSdkRoot({
+      platform: 'ios',
+      workspaceRoot: '/workspace/ft-sdk-cocos',
+      optionValue: '/opt/sdk/ios',
+      environment: { REPLAY_TRAFFIC_IOS_SDK_ROOT: '/ignored' },
+    })).toBe('/opt/sdk/ios');
+    expect(resolveNativeSdkRoot({
+      platform: 'ios',
+      workspaceRoot: '/workspace/ft-sdk-cocos',
+      environment: {},
+    })).toBe('/workspace/ft-sdk-ios');
+  });
+
   it('expands all image and pointer groups deterministically', () => {
     expect(Object.keys(REPLAY_TRAFFIC_GROUPS)).toHaveLength(12);
     const config = buildReplayTrafficRunConfig({

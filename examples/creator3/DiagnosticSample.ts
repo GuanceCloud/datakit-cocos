@@ -137,7 +137,8 @@ class Creator3DiagnosticSample {
         const snapshot = this.state.login(editBox.string || this.sampleUserId);
         guanceSdk.mobile.bindUser({
           userId: snapshot.userId,
-          userName: `Cocos ${this.selectedRole}`,
+          userName: `Fake Cocos ${this.selectedRole} Player`,
+          userEmail: `cocos-${this.selectedRole}@example.test`,
           extra: { role: this.selectedRole, sample: 'diagnostic-game' },
         });
         guanceSdk.rum.addAction('login_success', 'submit', this.state.attributes());

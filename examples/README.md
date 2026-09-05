@@ -47,6 +47,11 @@ The diagnostic sample is a small, art-asset-free Hybrid integration for validati
 
 `SdkBootstrap.ts` calls `guanceSdk.attach()` followed by `guanceSdk.enterCocos()`. When the host really leaves or removes the Cocos container, call the exported `leaveCocos()` before teardown so native Session Replay resumes ownership. Do not call it for Cocos scene changes or from `DiagnosticSample.onDestroy()`: the startup component is destroyed when the sample creates its first runtime scene, while the app is still inside Cocos.
 
+The diagnostic sample binds only synthetic identity data: `cocos-demo-001`, a
+`Fake Cocos ... Player` display name, and an address under the reserved
+`example.test` domain. Keep real user identities out of sample and benchmark
+runs.
+
 The sample switches the Replay camera whenever it creates a scene. Its bootstrap leaves automatic network tracking off because the controlled network failure is manually instrumented with one shared `fault.id`; enabling both paths would intentionally produce duplicate network events.
 
 ## Coverage

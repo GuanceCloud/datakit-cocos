@@ -5,6 +5,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { buildReplayTrafficRunConfig } from './replay-traffic-benchmark-config.mjs';
+import { resolveNativeSdkRoot } from './replay-traffic-local-config.mjs';
 
 const execFileAsync = promisify(execFile);
 const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -17,7 +18,12 @@ const repeat = Number(readOption('--repeat', '1'));
 const deviceLabel = readOption('--device-label', `${platform}-reference`);
 const runId = readOption('--run-id', defaultRunId(platform, deviceLabel, groupId, scenario, repeat));
 const applicationId = readOption('--application-id', 'com.cloudcare.sample.cocos.hybrid.creator3');
-const metadata = await repositoryMetadata(platform);
+const nativeSdkRoot = resolveNativeSdkRoot({
+  platform,
+  workspaceRoot: root,
+  optionValue: readOption('--native-sdk-root'),
+});
+const metadata = await repositoryMetadata(nativeSdkRoot);
 pinMatrixCommit(metadata, 'cocosSdkCommit', '--cocos-sdk-commit');
 pinMatrixCommit(metadata, 'nativeSdkCommit', '--native-sdk-commit');
 const config = buildReplayTrafficRunConfig({
@@ -101,10 +107,7 @@ while (Date.now() < deadline) {
 }
 throw new Error(`Timed out waiting for ${runId} to complete`);
 
-async function repositoryMetadata(targetPlatform) {
-  const nativeRoot = targetPlatform === 'android'
-    ? path.resolve(root, '..', 'ft-sdk-android')
-    : path.resolve(root, '..', 'ft-sdk-ios');
+async function repositoryMetadata(nativeRoot) {
   const [sdkCommit, sdkStatus, nativeCommit, nativeStatus] = await Promise.all([
     git(root, 'rev-parse', 'HEAD'),
     git(root, 'status', '--porcelain'),
