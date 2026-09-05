@@ -1,7 +1,8 @@
-import { Camera, Director, EditBox, RenderTexture, UITransform, director, native, sys, view } from 'cc';
+import { Camera, Director, EditBox, RenderTexture, UITransform, Vec3, director, native, sys, view } from 'cc';
 import type { FTCanvasCapture } from '../core/replay.js';
 import type { FTCapturedFrame, FTPrivacyRegion, FTReplayPrivacyMode, FTStoredFrame } from '../core/types.js';
 import { frameFingerprint } from '../core/replay.js';
+import { projectPrivacyBounds } from '../core/replay-privacy.js';
 import { waitForRenderTextureReadback } from './replay-render-cycle.js';
 
 export class FTCreator3CanvasCapture implements FTCanvasCapture {
@@ -34,10 +35,14 @@ export class FTCreator3CanvasCapture implements FTCanvasCapture {
     texture.reset({ width, height });
     const previous = camera.targetTexture;
     let pixels: Uint8Array | undefined;
+    let privacyRegions: FTPrivacyRegion[] = [];
     try {
       camera.targetTexture = texture;
       await waitForRenderTextureReadback(completeDrawCycle);
       pixels = texture.readPixels(0, 0, width, height);
+      // worldToScreen uses the active render target dimensions. Keep the
+      // capture target attached so projection and pixels share one viewport.
+      if (pixels) privacyRegions = this.collectPrivacyRegions(camera, width, height);
     } finally {
       camera.targetTexture = previous;
       texture.destroy();
@@ -51,7 +56,7 @@ export class FTCreator3CanvasCapture implements FTCanvasCapture {
       width,
       height,
       timestamp: Date.now(),
-      privacyRegions: this.collectPrivacyRegions(width, height, visible.width, visible.height),
+      privacyRegions,
     };
   }
 
@@ -68,28 +73,29 @@ export class FTCreator3CanvasCapture implements FTCanvasCapture {
   }
 
   private collectPrivacyRegions(
+    camera: any,
     width: number,
     height: number,
-    sourceWidth: number,
-    sourceHeight: number,
   ): FTPrivacyRegion[] {
     const nodes = new Map(this.privacy);
     director.getScene()?.getComponentsInChildren(EditBox)?.forEach((editBox: any) => {
       if (!nodes.has(editBox.node)) nodes.set(editBox.node, 'mask');
     });
-    const scaleX = width / sourceWidth;
-    const scaleY = height / sourceHeight;
     const regions: FTPrivacyRegion[] = [];
     nodes.forEach((mode, node: any) => {
       const bounds = node?.getComponent?.(UITransform)?.getBoundingBoxToWorld?.();
       if (!bounds) return;
-      regions.push({
-        x: bounds.x * scaleX,
-        y: height - (bounds.y + bounds.height) * scaleY,
-        width: bounds.width * scaleX,
-        height: bounds.height * scaleY,
-        mode: mode === 'hide' ? 'hide' : 'mask',
-      });
+      const worldZ = node.worldPosition?.z || 0;
+      const projected = projectPrivacyBounds(
+        bounds,
+        width,
+        height,
+        width,
+        height,
+        (x, y) => camera.worldToScreen?.(new Vec3(x, y, worldZ)),
+      );
+      if (!projected) throw new Error('Unable to project Replay privacy bounds');
+      regions.push({ ...projected, mode: mode === 'hide' ? 'hide' : 'mask' });
     });
     return regions;
   }

@@ -98,6 +98,7 @@ seconds and tap each button:
 - `RUM Error`: one Error and one error-level linked Log
 - `Replay change`: a visible color delta for Session Replay; tap several times
 - `PRIVATE TOKEN / MASK-ME-8391`: visible on the live Cocos page, but replaced by a gray rectangle in Session Replay
+- `Mask: toggle fit`: switches between `SHOW_ALL` and `FIXED_HEIGHT`; verify the private token stays fully gray in Replay after each change, while nearby public content remains visible
 - `Native page`: leaves Cocos and returns RUM View/Replay ownership to native UI
 
 The native View is `HybridNativeAndroidHome`; after opening Cocos, the active

@@ -1,6 +1,6 @@
 /// <reference path="../src/creator2/shims.d.ts" />
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FTCreator2CanvasCapture } from '../src/creator2/capture';
 import { flipRgbaRows } from '../src/core/replay-pixels';
 
@@ -83,5 +83,64 @@ describe('Creator 2 replay capture', () => {
       3, 0, 0, 255, 4, 0, 0, 255,
       1, 0, 0, 255, 2, 0, 0, 255,
     ]);
+  });
+
+  it.each([false, true])('projects privacy bounds through the active camera (3D=%s)', async (is3DNode) => {
+    class RenderTexture {
+      initWithSize(): void {}
+      readPixels(): Uint8Array { return new Uint8Array(200 * 100 * 4); }
+      destroy(): void {}
+    }
+    const project = vi.fn(({ x, y, z }: { x: number; y: number; z?: number }) => {
+      // Native Vec3 conversion rejects a Vec2; the output stays at zero.
+      if (is3DNode && typeof z !== 'number') return { x: 0, y: 0, z: 0 };
+      return { x: x + 100, y: y + 50 };
+    });
+    const camera = {
+      targetTexture: undefined,
+      clearFlags: 0,
+      node: { is3DNode },
+      getWorldToScreenPoint: project,
+    };
+    const privateNode = {
+      getBoundingBoxToWorld: () => ({ x: -20, y: -10, width: 40, height: 20 }),
+      // Creator 2 requires a caller-provided output vector.
+      getWorldPosition: (out: { x: number; y: number; z: number }) => {
+        out.x = 0;
+        out.y = 0;
+        out.z = 25;
+        return out;
+      },
+    };
+    (globalThis as { cc?: unknown }).cc = {
+      Camera: { ClearFlags: { COLOR: 1 } },
+      Director: { EVENT_AFTER_DRAW: 'after-draw' },
+      EditBox: class {},
+      RenderTexture,
+      director: {
+        getScene: () => ({
+          getComponentInChildren: () => camera,
+          getComponentsInChildren: () => [],
+        }),
+        once: (_event: string, callback: () => void) => callback(),
+      },
+      gfx: { RB_FMT_D24S8: 7 },
+      v2: (x: number, y: number) => ({ x, y }),
+      v3: (x: number, y: number, z: number) => ({ x, y, z }),
+      view: { getVisibleSizeInPixel: () => ({ width: 200, height: 100 }) },
+      visibleRect: { width: 200, height: 100 },
+    };
+    const capture = new FTCreator2CanvasCapture();
+    capture.setPrivacy(privateNode, 'mask');
+
+    const frame = await capture.capture(200);
+
+    expect(frame?.privacyRegions).toEqual([{ x: 80, y: 40, width: 40, height: 20, mode: 'mask' }]);
+    if (is3DNode) expect(project).toHaveBeenCalledWith({ x: -20, y: -10, z: 25 });
+
+    project.mockImplementation(() => ({ x: 0, y: 0 }));
+    await expect(capture.capture(200)).rejects.toThrow(/privacy/i);
+    expect(camera.targetTexture).toBeUndefined();
+    expect(camera.clearFlags).toBe(0);
   });
 });

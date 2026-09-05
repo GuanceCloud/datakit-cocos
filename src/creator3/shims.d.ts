@@ -5,6 +5,7 @@ declare module 'cc' {
   export const Input: any;
   export const RenderTexture: any;
   export const UITransform: any;
+  export const Vec3: any;
   export const director: any;
   export const input: any;
   export const native: any;
@@ -15,4 +16,3 @@ declare module 'cc' {
 declare module 'cc/env' {
   export const NATIVE: boolean;
 }
-

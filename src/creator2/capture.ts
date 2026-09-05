@@ -1,6 +1,7 @@
 import type { FTCanvasCapture } from '../core/replay.js';
 import { frameFingerprint } from '../core/replay.js';
 import { flipRgbaRows } from '../core/replay-pixels.js';
+import { projectPrivacyBounds } from '../core/replay-privacy.js';
 import type { FTCapturedFrame, FTPrivacyRegion, FTReplayPrivacyMode, FTStoredFrame } from '../core/types.js';
 
 export class FTCreator2CanvasCapture implements FTCanvasCapture {
@@ -35,6 +36,7 @@ export class FTCreator2CanvasCapture implements FTCanvasCapture {
     const previous = camera.targetTexture;
     const previousClearFlags = camera.clearFlags;
     let pixels: Uint8Array | undefined;
+    let privacyRegions: FTPrivacyRegion[] = [];
     try {
       // Creator 2 cameras clear only depth and stencil by default. A fresh
       // RenderTexture can therefore expose stale GPU color data anywhere the
@@ -43,6 +45,7 @@ export class FTCreator2CanvasCapture implements FTCanvasCapture {
       camera.targetTexture = texture;
       await new Promise<void>((resolve) => cc.director.once(cc.Director.EVENT_AFTER_DRAW, resolve));
       pixels = texture.readPixels();
+      if (pixels) privacyRegions = this.collectPrivacyRegions(camera, width, height, visible.width, visible.height);
     } finally {
       camera.targetTexture = previous;
       camera.clearFlags = previousClearFlags;
@@ -58,7 +61,7 @@ export class FTCreator2CanvasCapture implements FTCanvasCapture {
       width,
       height,
       timestamp: Date.now(),
-      privacyRegions: this.collectPrivacyRegions(width, height, visible.width, visible.height),
+      privacyRegions,
     };
   }
 
@@ -75,6 +78,7 @@ export class FTCreator2CanvasCapture implements FTCanvasCapture {
   }
 
   private collectPrivacyRegions(
+    camera: any,
     width: number,
     height: number,
     sourceWidth: number,
@@ -84,19 +88,23 @@ export class FTCreator2CanvasCapture implements FTCanvasCapture {
     cc.director.getScene()?.getComponentsInChildren?.(cc.EditBox)?.forEach((editBox: any) => {
       if (!nodes.has(editBox.node)) nodes.set(editBox.node, 'mask');
     });
-    const scaleX = width / sourceWidth;
-    const scaleY = height / sourceHeight;
+    const screenWidth = cc.visibleRect?.width || sourceWidth;
+    const screenHeight = cc.visibleRect?.height || sourceHeight;
     const regions: FTPrivacyRegion[] = [];
     nodes.forEach((mode, node: any) => {
       const bounds = node?.getBoundingBoxToWorld?.();
       if (!bounds) return;
-      regions.push({
-        x: bounds.x * scaleX,
-        y: height - (bounds.y + bounds.height) * scaleY,
-        width: bounds.width * scaleX,
-        height: bounds.height * scaleY,
-        mode: mode === 'hide' ? 'hide' : 'mask',
-      });
+      const worldZ = node.getWorldPosition?.(cc.v3(0, 0, 0)).z ?? 0;
+      const projected = projectPrivacyBounds(
+        bounds,
+        width,
+        height,
+        screenWidth,
+        screenHeight,
+        (x, y) => camera.getWorldToScreenPoint?.(cc.v3(x, y, worldZ)),
+      );
+      if (!projected) throw new Error('Unable to project Replay privacy bounds');
+      regions.push({ ...projected, mode: mode === 'hide' ? 'hide' : 'mask' });
     });
     return regions;
   }

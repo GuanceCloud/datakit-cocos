@@ -51,6 +51,7 @@ class HybridTelemetryRuntime {
   private replayCard?: cc.Graphics;
   private privacyMaskProbe?: cc.Node;
   private replayState = 0;
+  private replayCamera?: cc.Camera;
   private resourceSequence = 0;
   private entered = false;
   private entering = false;
@@ -59,6 +60,7 @@ class HybridTelemetryRuntime {
 
   start(): void {
     const scene = this.createScene();
+    this.replayCamera = scene.camera;
     setReplayCamera(scene.camera);
     this.render(scene.root);
 
@@ -240,6 +242,15 @@ class HybridTelemetryRuntime {
     this.setStatus(`Replay visual state changed: ${this.replayState}`, color);
   }
 
+  private toggleMaskCamera(): void {
+    const camera = this.replayCamera;
+    if (!camera) return;
+    camera.node.is3DNode = !camera.node.is3DNode;
+    const scenario = camera.node.is3DNode ? 'camera_3d' : 'camera_2d';
+    guanceSdk.rum.addAction('creator2_mask_camera_changed', 'click', { ...ATTRIBUTES, mask_scenario: scenario });
+    this.setStatus(`Mask verification: ${scenario} · private token must stay gray in Replay`, COLORS.primary);
+  }
+
   private openNativePage(): void {
     try {
       this.leaveCocosPage();
@@ -340,6 +351,7 @@ class HybridTelemetryRuntime {
     this.button(root, 'RumError', 'RUM Error', -270, -48, 220, 56, () => this.emitError(), COLORS.danger);
     this.button(root, 'ReplayChange', 'Replay change', 0, -48, 220, 56, () => this.changeReplayState(), COLORS.warning);
     this.button(root, 'NativePage', 'Native page', 270, -48, 220, 56, () => this.openNativePage(), COLORS.info);
+    this.button(root, 'MaskCamera', 'Mask: toggle 2D/3D', 0, -108, 260, 40, () => this.toggleMaskCamera(), COLORS.primary);
 
     const statusPanel = this.panel(root, 'StatusPanel', 0, -180, 780, 84, COLORS.panel);
     this.status = this.label(statusPanel, 'Preparing Hybrid integration…', 0, 0, 730, 50, 18, COLORS.muted);
