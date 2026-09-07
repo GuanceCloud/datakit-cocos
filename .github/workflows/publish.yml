@@ -102,11 +102,15 @@ jobs:
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `npm_dist_tag=${npmDistTag}\n`);
           console.log(`Publishing ${packageVersion} with npm dist-tag ${npmDistTag}`);
           (async () => {
-            const url = `https://registry.npmjs.org/@cloudcare%2fcocos-sdk/${packageVersion}`;
+            const url = `https://registry.npmjs.org/@cloudcare%2fcocos-sdk?release_check=${Date.now()}`;
             const response = await fetch(url);
-            if (response.status === 404) return;
             if (!response.ok) throw new Error(`Registry preflight failed: ${response.status}`);
-            const published = await response.json();
+            const document = await response.json();
+            if (document.name !== '@cloudcare/cocos-sdk' || !document.versions) {
+              throw new Error('Invalid npm package document');
+            }
+            const published = document.versions[packageVersion];
+            if (!published) return;
             if (published.name !== '@cloudcare/cocos-sdk' || published.gitHead !== process.env.GITHUB_SHA) {
               throw new Error('Existing npm version has a different release identity');
             }
