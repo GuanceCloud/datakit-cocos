@@ -28,6 +28,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - run: npm run test:release-policy
       - run: npm run build
 
   publish:
@@ -88,19 +89,7 @@ jobs:
             throw new Error(`Release versions do not match:\n${details}`);
           }
 
-          let npmDistTag;
-          if (/^\d+\.\d+\.\d+-alpha\.\d+$/.test(packageVersion)) {
-            npmDistTag = 'alpha';
-          } else if (/^\d+\.\d+\.\d+-beta\.\d+$/.test(packageVersion)) {
-            npmDistTag = 'beta';
-          } else if (/^\d+\.\d+\.\d+$/.test(packageVersion)) {
-            npmDistTag = 'latest';
-          } else {
-            throw new Error(`Unsupported release version: ${packageVersion}`);
-          }
-
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, `npm_dist_tag=${npmDistTag}\n`);
-          console.log(`Publishing ${packageVersion} with npm dist-tag ${npmDistTag}`);
+          const { selectDistTag } = require('./scripts/release-policy.cjs');
           (async () => {
             const url = `https://registry.npmjs.org/@cloudcare%2fcocos-sdk?release_check=${Date.now()}`;
             const response = await fetch(url);
@@ -109,6 +98,9 @@ jobs:
             if (document.name !== '@cloudcare/cocos-sdk' || !document.versions) {
               throw new Error('Invalid npm package document');
             }
+            const npmDistTag = selectDistTag(packageVersion, Object.keys(document.versions));
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `npm_dist_tag=${npmDistTag}\n`);
+            console.log(`Publishing ${packageVersion} with npm dist-tag ${npmDistTag}`);
             const published = document.versions[packageVersion];
             if (!published) return;
             if (published.name !== '@cloudcare/cocos-sdk' || published.gitHead !== process.env.GITHUB_SHA) {
