@@ -12,6 +12,7 @@ concurrency:
 jobs:
   verify:
     name: Verify package
+    if: github.repository == 'GuanceCloud/datakit-cocos'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -100,9 +101,22 @@ jobs:
 
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `npm_dist_tag=${npmDistTag}\n`);
           console.log(`Publishing ${packageVersion} with npm dist-tag ${npmDistTag}`);
+          (async () => {
+            const url = `https://registry.npmjs.org/@cloudcare%2fcocos-sdk/${packageVersion}`;
+            const response = await fetch(url);
+            if (response.status === 404) return;
+            if (!response.ok) throw new Error(`Registry preflight failed: ${response.status}`);
+            const published = await response.json();
+            if (published.name !== '@cloudcare/cocos-sdk' || published.gitHead !== process.env.GITHUB_SHA) {
+              throw new Error('Existing npm version has a different release identity');
+            }
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, 'already_published=true\n');
+            console.log('This commit is already published; Jenkins will verify the package contents.');
+          })().catch(error => { console.error(error); process.exitCode = 1; });
           NODE
 
       - name: Publish to npm
+        if: steps.release.outputs.already_published != 'true'
         run: >-
           npm publish
           --workspace @cloudcare/cocos-sdk
