@@ -6,8 +6,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 const temporaryDirectories: string[] = [];
 const generatedTargets = [
-  'examples/native-host/android/HybridSampleEnvironment.java',
-  'examples/native-host/ios/HybridSampleEnvironment.generated.h',
+  'examples/hybrid-creator3/native-host/android/HybridSampleEnvironment.java',
+  'examples/hybrid-creator3/native-host/ios/HybridSampleEnvironment.generated.h',
 ];
 
 afterEach(() => {

@@ -4,13 +4,15 @@ import { describe, expect, it } from 'vitest';
 
 const brandNeutralTargets = [
   'src',
-  'examples/creator2',
-  'examples/creator3',
-  'examples/creator2-app/assets/Script',
   'native/android/src',
   'native/ios/FTCocosBridge.h',
   'native/ios/FTCocosBridge.m',
   'scripts/configure-sample.mjs',
+];
+
+const sampleTargets = [
+  'examples/hybrid-creator2/assets/Script/HybridTelemetrySample.ts',
+  'examples/hybrid-creator3/assets/HybridTelemetrySample.ts',
 ];
 
 const distributionTargets = [
@@ -30,6 +32,8 @@ const requiredDistributionIdentifiers = [
 describe('shared-code brand boundary', () => {
   it('keeps runtime and Sample source brand-neutral', () => {
     expect(findBrandReferences(brandNeutralTargets, ['guanceSdk'])).toEqual([]);
+    // The runnable samples display the product name in their page title.
+    expect(findBrandReferences(sampleTargets, ['guanceSdk', 'Guance Cocos Hybrid'])).toEqual([]);
   });
 
   it('limits distribution code to required package and repository identifiers', () => {

@@ -13,7 +13,7 @@ const environmentKeys = [
 ];
 
 const outputRoot = path.resolve(readOption('--output-root') || process.cwd());
-const nativeHostDirectory = readRelativeDirectoryOption('--native-host-dir', 'examples/native-host');
+const nativeHostDirectory = readRelativeDirectoryOption('--native-host-dir', 'examples/hybrid-creator3/native-host');
 const configuration = readConfiguration(process.env);
 const targets = [
   {
@@ -63,7 +63,7 @@ function readConfiguration(environment) {
     androidAppId,
     iosAppId,
     debug: parseBoolean(values.SAMPLE_DEBUG, true),
-    serviceName: values.SAMPLE_SERVICE_NAME || 'cocos-diagnostic-game',
+    serviceName: values.SAMPLE_SERVICE_NAME || 'cocos-hybrid-sample',
     env: values.SAMPLE_ENV || 'demo',
   };
 }

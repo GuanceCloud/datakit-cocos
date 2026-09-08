@@ -18,7 +18,6 @@ import {
   view,
 } from 'cc';
 import { guanceSdk, setReplayCamera } from '@cloudcare/cocos-sdk/creator3';
-import { startReplayTrafficBenchmarkIfConfigured } from './ReplayTrafficBenchmark';
 
 const { ccclass } = _decorator;
 
@@ -48,7 +47,6 @@ let activeSample: HybridTelemetryRuntime | undefined;
 @ccclass('HybridTelemetrySample')
 export class HybridTelemetrySample extends Component {
   start(): void {
-    if (startReplayTrafficBenchmarkIfConfigured()) return;
     if (activeSample) return;
     activeSample = new HybridTelemetryRuntime();
     activeSample.start();

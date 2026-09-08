@@ -38,11 +38,6 @@ public final class HybridSampleNativeActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         HybridSampleSdk.start();
-        if (HybridSampleSdk.isReplayTrafficBenchmarkEnabled()) {
-            openCocos();
-            finish();
-            return;
-        }
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
         setContentView(createContent());
     }
@@ -88,11 +83,6 @@ public final class HybridSampleNativeActivity extends Activity {
         openCocos.setOnClickListener(view -> openCocos());
         actions.addView(openCocos, weighted(0));
         root.addView(actions, matchWrap(dp(34)));
-
-        Button uploadPerfectReplay = button("Upload Perfect Replay");
-        uploadPerfectReplay.setOnClickListener(view ->
-                PerfectHybridReplayUploader.start(value -> runOnUiThread(() -> status.setText(value))));
-        root.addView(uploadPerfectReplay, matchWrap(dp(22)));
 
         status = text("Preparing native telemetry…", 17, Color.rgb(44, 202, 178));
         status.setBackgroundColor(Color.rgb(27, 39, 64));

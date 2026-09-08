@@ -14,8 +14,18 @@
 
 # Generated from SAMPLE_* environment variables; may contain credentials.
 *.generated.ts*
-/examples/native-host/android/HybridSampleEnvironment.java
-/examples/native-host/ios/HybridSampleEnvironment.generated.h
+
+# Local diagnostic projects and experiments; maintained samples live in hybrid-creator{2,3}.
+/examples/creator2/
+/examples/creator3/
+/examples/creator2-app/
+/examples/shared/
+/examples/native-host/
+/examples/hybrid-creator3/assets/ReplayTrafficBenchmark.ts*
+/examples/hybrid-creator3/native-host/android/PerfectHybridReplayUploader.java
+/scripts/*replay-traffic*
+/test/diagnostic-sample.test.ts
+/test/replay-traffic-benchmark.test.ts
 
 # Staged into the publishable workspace by npm run build.
 /packages/cocos/LICENSE
