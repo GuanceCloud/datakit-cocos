@@ -8,7 +8,7 @@
   },
   "packageName": "com.cloudcare.sample.cocos.hybrid.creator2",
   "startScene": "2d2f792f-a40c-49bb-a189-ed176a246e49",
-  "title": "Guance Cocos Hybrid Creator 2",
+  "title": "Cocos Hybrid Creator 2",
   "webOrientation": "auto",
   "android": {
     "packageName": "com.cloudcare.sample.cocos.hybrid.creator2",

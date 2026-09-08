@@ -1,7 +1,7 @@
 Pod::Spec.new do |s|
   s.name             = 'HybridSampleHost'
   s.version          = '1.0.0'
-  s.summary          = 'Native Guance SDK owner for the Cocos Creator 2 Hybrid sample.'
+  s.summary          = 'Native SDK owner for the Cocos Creator 2 Hybrid sample.'
   s.homepage         = 'https://github.com/GuanceCloud/datakit-cocos'
   s.license          = { :type => 'Apache-2.0' }
   s.author           = { 'Guance Cloud' => 'support@guance.com' }

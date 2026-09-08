@@ -13,6 +13,19 @@ const brandNeutralTargets = [
 const sampleTargets = [
   'examples/hybrid-creator2/assets/Script/HybridTelemetrySample.ts',
   'examples/hybrid-creator3/assets/HybridTelemetrySample.ts',
+  'examples/hybrid-creator2/assets/Scene/HybridTelemetry.fire',
+  'examples/hybrid-creator2/settings/builder.json',
+  'examples/hybrid-creator3/build-config',
+  'examples/hybrid-creator2/native-host/android/HybridSampleNativeActivity.java',
+  'examples/hybrid-creator3/native-host/android/HybridSampleNativeActivity.java',
+  'examples/hybrid-creator2/native-host/ios/HybridSampleSDK.m',
+  'examples/hybrid-creator3/native-host/ios/HybridSampleSDK.m',
+];
+
+const requiredSampleIdentifiers = [
+  'guanceSdk',
+  '#import <GuanceSDK/GuanceSDK.h>',
+  '#import <GuanceSDK/GuanceSessionReplay.h>',
 ];
 
 const distributionTargets = [
@@ -32,8 +45,9 @@ const requiredDistributionIdentifiers = [
 describe('shared-code brand boundary', () => {
   it('keeps runtime and Sample source brand-neutral', () => {
     expect(findBrandReferences(brandNeutralTargets, ['guanceSdk'])).toEqual([]);
-    // The runnable samples display the product name in their page title.
-    expect(findBrandReferences(sampleTargets, ['guanceSdk', 'Guance Cocos Hybrid'])).toEqual([]);
+    expect(findBrandReferences(['src/core'])).toEqual([]);
+    // Preserve the public API and native imports while keeping sample UI text neutral.
+    expect(findBrandReferences(sampleTargets, requiredSampleIdentifiers)).toEqual([]);
   });
 
   it('limits distribution code to required package and repository identifiers', () => {

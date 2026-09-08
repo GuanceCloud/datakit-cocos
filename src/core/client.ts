@@ -21,7 +21,7 @@ export interface FTAutoTrackingController {
 type FTCocosSDKState = 'idle' | 'standalone' | 'hybrid-attached' | 'hybrid-entered';
 
 /**
- * Cocos SDK facade exposed through the platform entry point's `guanceSdk`
+ * Cocos SDK facade exposed through the platform entry point's SDK
  * singleton. Do not construct this class directly.
  */
 export class FTCocosSDK {
@@ -66,7 +66,7 @@ export class FTCocosSDK {
    */
   start(config: FTCocosConfig): void {
     if (this.state !== 'idle') {
-      throw new Error('guanceSdk.start() and guanceSdk.attach() are mutually exclusive');
+      throw new Error('start() and attach() are mutually exclusive');
     }
     this.mobile.start(config.sdk);
     // Base SDK installation already belongs to this Cocos runtime after the
@@ -91,7 +91,7 @@ export class FTCocosSDK {
    */
   attach(config: FTCocosHybridConfig = {}): void {
     if (this.state === 'standalone') {
-      throw new Error('guanceSdk.start() and guanceSdk.attach() are mutually exclusive');
+      throw new Error('start() and attach() are mutually exclusive');
     }
     if (this.state === 'hybrid-attached' || this.state === 'hybrid-entered') return;
 
@@ -120,10 +120,10 @@ export class FTCocosSDK {
    */
   enterCocos(options: FTCocosEnterOptions = {}): void {
     if (this.state === 'standalone') {
-      throw new Error('guanceSdk.enterCocos() is only available after guanceSdk.attach()');
+      throw new Error('enterCocos() is only available after attach()');
     }
     if (this.state === 'idle') {
-      throw new Error('Call guanceSdk.attach() before guanceSdk.enterCocos()');
+      throw new Error('Call attach() before enterCocos()');
     }
     if (this.state === 'hybrid-entered') return;
 
@@ -153,7 +153,7 @@ export class FTCocosSDK {
    */
   leaveCocos(): void {
     if (this.state === 'standalone') {
-      throw new Error('guanceSdk.leaveCocos() is only available after guanceSdk.attach()');
+      throw new Error('leaveCocos() is only available after attach()');
     }
     if (this.state === 'idle' || this.state === 'hybrid-attached') return;
 

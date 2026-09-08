@@ -20,7 +20,7 @@ static __weak UIViewController *FTHybridNativePageController;
                                                  blue:34.0 / 255.0
                                                 alpha:1];
 
-    UILabel *title = [self label:@"Guance Hybrid · Native iOS Page" size:30 color:UIColor.whiteColor];
+    UILabel *title = [self label:@"Cocos Hybrid · Native iOS Page" size:30 color:UIColor.whiteColor];
     UILabel *subtitle = [self label:@"Native SDK owns initialization. Open Cocos to transfer RUM View and Replay ownership."
                                    size:17
                                   color:[UIColor colorWithRed:151.0 / 255.0 green:164.0 / 255.0 blue:190.0 / 255.0 alpha:1]];

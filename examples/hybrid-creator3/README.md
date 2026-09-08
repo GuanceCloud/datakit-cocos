@@ -50,7 +50,7 @@ The reproducible CLI build inputs used to validate this project are in
 package IDs and physical-device iOS target that should appear in the Build
 panel.
 
-The SDK extension injects the native Cocos bridge and Guance dependencies. The
+The SDK extension injects the native Cocos bridge and native SDK dependencies. The
 sample's native owner is installed separately after each native rebuild:
 
 ```bash
@@ -83,7 +83,7 @@ engine-library architecture limitations that can affect arm64 simulators.
 With Xcode 26, Cocos 3.8.8's bundled Enoki source may fail with
 `invalid-specialization`. Add `-Wno-invalid-specialization` to **Other C++
 Flags** for the generated Cocos targets (or use the equivalent command-line
-override). This compatibility flag concerns the Creator engine, not the Guance
+override). This compatibility flag concerns the Creator engine, not the monitoring
 SDK; the sample's iOS host and complete app were validated with it enabled.
 
 ## 3. Generate verification data

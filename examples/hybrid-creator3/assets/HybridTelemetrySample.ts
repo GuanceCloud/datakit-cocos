@@ -343,7 +343,7 @@ class HybridTelemetryRuntime {
 
   private render(root: Node): void {
     this.panel(root, 'Background', 0, 0, 960, 640, COLORS.background);
-    this.label(root, 'Guance Cocos Hybrid · Creator 3', 0, 258, 860, 48, 34, COLORS.text);
+    this.label(root, 'Cocos Hybrid · Creator 3', 0, 258, 860, 48, 34, COLORS.text);
     this.label(root, 'Native host owns SDK modules; Cocos attaches RUM automation and canvas Replay.', 0, 218, 860, 30, 17, COLORS.muted);
 
     const replayNode = this.panel(root, 'ReplayVisualState', 0, 125, 720, 100, COLORS.info);

@@ -99,7 +99,7 @@ export class FTSessionReplay {
    */
   start(config: FTSessionReplayConfig = {}): void {
     if (this.mode === 'hybrid') {
-      throw new Error('Hybrid Replay is managed by guanceSdk.enterCocos() and leaveCocos()');
+      throw new Error('Hybrid Replay is managed by enterCocos() and leaveCocos()');
     }
     if (this.mode === 'standalone') return;
     samplingRate(config.sampleRate, 'replay.sampleRate');
@@ -132,7 +132,7 @@ export class FTSessionReplay {
   /** @internal */
   enterHybrid(): void {
     if (this.mode !== 'hybrid') {
-      throw new Error('Call guanceSdk.attach() before entering Hybrid Replay');
+      throw new Error('Call attach() before entering Hybrid Replay');
     }
     if (!this.hybridReplayEnabled || this.running) return;
     this.transport.invoke('hybrid.setExternalRecorderActive', { active: true });
@@ -162,7 +162,7 @@ export class FTSessionReplay {
   /** Stops standalone Cocos canvas capture and native Session Replay. */
   stop(): void {
     if (this.mode === 'hybrid') {
-      throw new Error('Hybrid Replay is managed by guanceSdk.enterCocos() and leaveCocos()');
+      throw new Error('Hybrid Replay is managed by enterCocos() and leaveCocos()');
     }
     if (this.mode === 'idle') return;
     this.stopCapture();

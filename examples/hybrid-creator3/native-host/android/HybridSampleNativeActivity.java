@@ -62,7 +62,7 @@ public final class HybridSampleNativeActivity extends Activity {
         root.setPadding(dp(48), dp(36), dp(48), dp(36));
         root.setBackgroundColor(Color.rgb(12, 18, 34));
 
-        TextView title = text("Guance Hybrid · Native Android Page", 30, Color.WHITE);
+        TextView title = text("Cocos Hybrid · Native Android Page", 30, Color.WHITE);
         root.addView(title, matchWrap(dp(16)));
 
         TextView subtitle = text(

@@ -47,7 +47,7 @@ Creator 2.4's native generator requires Python 2.7. Configure **Python 2.7**,
 Android SDK, and a Creator-compatible NDK in Creator Preferences before an
 Android/iOS native build. Python 3 is not accepted by the bundled `cocos.py`.
 
-The SDK package injects the native Cocos bridge and Guance dependencies. The
+The SDK package injects the native Cocos bridge and native SDK dependencies. The
 sample's native owner is installed separately after each native rebuild:
 
 ```bash
