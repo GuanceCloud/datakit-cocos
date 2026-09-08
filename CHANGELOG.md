@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.0-alpha.3
+
+### Improvements
+
+- **Android SDK dependencies**: Upgrade the Android agent SDK from `1.7.6-alpha01` to `1.7.6-alpha02` and Session Replay from `0.1.9-alpha01` to `0.1.9-alpha02` in the native dependency installer for Creator 2 and Creator 3.
+- **Hybrid integration samples**: Keep one minimal Hybrid integration project for each Creator generation. Remove legacy diagnostic projects, copied SDK installations, and Replay traffic benchmark tools from the maintained examples.
+- **SDK and sample messages**: Simplify SDK error messages and sample text by removing unnecessary branding.
+
+### Fixes
+
+- **npm publishing**: Check package metadata before publishing to detect an existing version and validate its release identity. Publish the newest prerelease under `latest` until the first stable release is available.
+
 ## 0.1.0-alpha.2
 
 ### Fixes
