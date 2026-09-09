@@ -15,6 +15,39 @@ afterEach(() => {
 });
 
 describe('native build integration', () => {
+  it.each(['AppDelegate.cpp', 'Game.cpp'])('installs the async file binding before scripts start in %s', (name) => {
+    const root = mkdtempSync(join(tmpdir(), 'cocos-replay-install-'));
+    temporaryRoots.push(root);
+    const classes = join(root, 'Classes');
+    mkdirSync(classes);
+    const entry = join(classes, name);
+    const anchor = name === 'Game.cpp' ? 'BaseGame::init();' : 'se->start();';
+    writeFileSync(entry, `void start() {\n  ${anchor}\n}\n`);
+    installNative(root, resolve('.'), { info() {}, warn() {} });
+    const first = readFileSync(entry, 'utf8');
+    installNative(root, resolve('.'), { info() {}, warn() {} });
+    expect(readFileSync(entry, 'utf8')).toBe(first);
+    expect(first.indexOf('installReplayFileBridge();')).toBeLessThan(first.indexOf(anchor));
+    expect(first).toContain('"cocos-sdk-replay/FTReplayFileBridge.h"');
+    expect(readFileSync(join(classes, 'cocos-sdk-replay', 'FTReplayFileWorker.h'), 'utf8'))
+      .toContain('class ReplayFileWorker');
+  });
+
+  it('installs the binding in Creator 3 native sources outside the build directory', () => {
+    const root = mkdtempSync(join(tmpdir(), 'cocos-replay-external-'));
+    temporaryRoots.push(root);
+    const build = join(root, 'build');
+    const native = join(root, 'native', 'engine');
+    const classes = join(native, 'common', 'Classes');
+    mkdirSync(build, { recursive: true });
+    mkdirSync(classes, { recursive: true });
+    writeFileSync(join(build, 'gradle.properties'), `NATIVE_DIR=${join(native, 'android')}\n`);
+    const entry = join(classes, 'Game.cpp');
+    writeFileSync(entry, 'void start() { BaseGame::init(); }');
+    installNative(build, resolve('.'), { info() {}, warn() {} });
+    expect(readFileSync(entry, 'utf8')).toContain('ft_cocos::installReplayFileBridge();');
+  });
+
   it('ships native-host attachment and recorder ownership bridge methods', () => {
     const android = readFileSync(
       resolve('native/android/src/main/java/com/ft/sdk/cocos/FTCocosBridge.java'),
