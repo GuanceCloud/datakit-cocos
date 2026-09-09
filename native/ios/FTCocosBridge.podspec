@@ -7,7 +7,7 @@ Pod::Spec.new do |s|
   s.author           = { 'Guance Cloud' => 'support@guance.com' }
   s.source           = { :path => '.' }
   s.platform         = :ios, '12.0'
-  s.source_files     = 'FTCocosBridge.{h,m}'
+  s.source_files     = 'FTCocosBridge.{h,m}', 'FTCocosReplayImageJobs.{h,m}'
   s.public_header_files = 'FTCocosBridge.h'
   s.requires_arc     = true
   # Cocos resolves FTCocosBridge by class name at runtime, so no direct symbol
