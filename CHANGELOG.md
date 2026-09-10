@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.0-alpha.4
+
+### Features
+
+- **Session Replay privacy components**: Add a `ReplayPrivacy` editor component for Creator 2 and Creator 3 to mask or hide nodes and prefabs in captured Replay images. The installer copies the component into project assets; code overrides take priority, and input fields remain masked by default.
+
+### Improvements
+
+- **Session Replay capture performance**: Move Replay file reads, writes, and native image encoding off the game thread on Android and iOS. Rebuild the native project after updating the SDK to include the asynchronous bridge.
+- **Hybrid privacy samples**: Add privacy component examples and mask-fit controls to the maintained Creator 2 and Creator 3 Hybrid samples.
+
+### Fixes
+
+- **Android Session Replay playback**: Upgrade the native dependency installer from `ft-session-replay:0.1.9-alpha02` to `0.1.9-alpha03`, which aligns segment compression with the Browser SDK format and restores playback of affected sessions containing multiple segments. Verified with published Maven artifacts in an old/new/old comparison across native and Cocos pages.
+
 ## 0.1.0-alpha.3
 
 ### Improvements

@@ -254,7 +254,7 @@ function patchGradle(file, nativeRoot) {
     'dependencies {',
     "    implementation 'com.cloudcare.ft.mobile.sdk.tracker.agent:ft-sdk:1.7.6-alpha02'",
     "    implementation 'com.cloudcare.ft.mobile.sdk.tracker.agent:ft-native:1.1.3'",
-    "    implementation 'com.cloudcare.ft.mobile.sdk.tracker.agent:ft-session-replay:0.1.9-alpha02'",
+    "    implementation 'com.cloudcare.ft.mobile.sdk.tracker.agent:ft-session-replay:0.1.9-alpha03'",
     "    implementation 'com.google.code.gson:gson:2.10.1'",
     "    implementation platform('org.jetbrains.kotlin:kotlin-bom:1.8.22')",
     "    implementation 'androidx.appcompat:appcompat:1.1.0'",
