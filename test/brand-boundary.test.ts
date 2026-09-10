@@ -24,6 +24,7 @@ const sampleTargets = [
 
 const requiredSampleIdentifiers = [
   'guanceSdk',
+  'guance-cocos-sdk/ReplayPrivacy',
   '#import <GuanceSDK/GuanceSDK.h>',
   '#import <GuanceSDK/GuanceSessionReplay.h>',
 ];

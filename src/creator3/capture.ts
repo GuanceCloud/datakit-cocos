@@ -4,6 +4,7 @@ import type { FTCapturedFrame, FTPrivacyRegion, FTReplayPrivacyMode, FTStoredFra
 import { frameFingerprint } from '../core/replay.js';
 import { persistReplayFrame, disposeReplayFrame } from '../core/replay-file.js';
 import { projectPrivacyBounds } from '../core/replay-privacy.js';
+import { collectReplayPrivacyNodes } from '../core/replay-privacy-nodes.js';
 import { waitForRenderTextureReadback } from './replay-render-cycle.js';
 
 export class FTCreator3CanvasCapture implements FTCanvasCapture {
@@ -74,10 +75,12 @@ export class FTCreator3CanvasCapture implements FTCanvasCapture {
     width: number,
     height: number,
   ): FTPrivacyRegion[] {
-    const nodes = new Map(this.privacy);
-    director.getScene()?.getComponentsInChildren(EditBox)?.forEach((editBox: any) => {
-      if (!nodes.has(editBox.node)) nodes.set(editBox.node, 'mask');
-    });
+    const scene = director.getScene();
+    const nodes = collectReplayPrivacyNodes(
+      this.privacy,
+      scene?.getComponentsInChildren('ReplayPrivacy') || [],
+      scene?.getComponentsInChildren(EditBox) || [],
+    );
     const regions: FTPrivacyRegion[] = [];
     nodes.forEach((mode, node: any) => {
       const bounds = node?.getComponent?.(UITransform)?.getBoundingBoxToWorld?.();

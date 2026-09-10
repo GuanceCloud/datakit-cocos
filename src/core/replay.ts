@@ -174,8 +174,9 @@ export class FTSessionReplay {
    * Changes the Session Replay privacy treatment for a Cocos node.
    *
    * `mask` obscures the node, `hide` removes the region from the replay, and
-   * `unmask` clears an earlier override. The node must belong to the active
-   * Cocos scene.
+   * `unmask` clears an earlier code override, restoring any ReplayPrivacy
+   * component rule or default input masking. Code overrides take priority over
+   * a component on the same node. The node must belong to the active Cocos scene.
    *
    * @param node - Cocos node whose rendered bounds receive the privacy rule.
    * @param mode - Privacy treatment to apply.

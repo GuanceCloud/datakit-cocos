@@ -31,9 +31,12 @@ const extensionSource = path.join(packageRoot, 'extensions', `creator${creatorMa
 
 copyDirectory(extensionSource, destination);
 copyDirectory(path.join(packageRoot, 'native'), path.join(destination, 'native'));
+const componentDestination = path.join(projectRoot, 'assets', 'guance-cocos-sdk');
+copyDirectory(path.join(packageRoot, 'components', `creator${creatorMajor}`), componentDestination);
 
 process.stdout.write(
   `Installed ${metadata.name} for Cocos Creator ${creatorMajor} at ${destination}\n`
+  + `Installed ReplayPrivacy at ${componentDestination}. Add it through Session Replay/ReplayPrivacy in the component menu.\n`
   + 'Re-open Cocos Creator, enable the guance-cocos-sdk extension, and rebuild the native project.\n',
 );
 if (fs.existsSync(legacyDestination)) {
