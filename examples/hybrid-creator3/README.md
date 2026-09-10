@@ -103,6 +103,36 @@ seconds and tap each button:
 - `Mask: move + scale`: translates the probe group and scales it to 85%; tap again to restore
 - `Mask: toggle fit`: switches between `SHOW_ALL` and `FIXED_HEIGHT`; verify the private token stays fully gray in Replay after each change, while nearby public content remains visible
 - `Native page`: leaves Cocos and returns RUM View/Replay ownership to native UI
+- `Open 3D Replay scene`: opens the perspective mesh scene described below
+
+### 3D capture verification
+
+`Open 3D Replay scene` switches to actual `MeshRenderer` geometry: a rotating
+orange cube, an orbiting cyan sphere, a magenta occluder, a blue tower, and a
+ground grid. A perspective camera and a directional light make depth,
+occlusion, and changing geometry visible. `assets/resources/Replay3D.mtl`
+explicitly includes the PBR material dependency in native builds.
+
+Tap the left third of the screen to return to the existing 2D sample, the
+middle third to toggle the HUD, or the right third to pause/resume movement.
+These gestures still work with the HUD hidden. Returning restores the 2D
+Replay camera and the code privacy probe.
+
+Verify both cases against the live application:
+
+1. **HUD hidden:** compare the 3D model positions, orientation, colors, depth
+   occlusion, and ground grid with SDK Replay frames. Keep it running to check
+   that motion produces changing frames.
+2. **HUD visible:** the caption is rendered by an independent UI camera.
+   The sample deliberately keeps `setReplayCamera()` on the 3D camera. The
+   current SDK captures the 3D scene but omits this caption. This case exposes
+   the single-camera limitation; it is not full-screen composition support.
+
+Native capture was exercised on Creator 3.8.8 with Android 12 / GLES3 and
+iOS 26.5 / Metal simulators, using fixed model poses and a moved camera for
+screen-to-capture comparisons. This validates the SDK's native frame capture;
+it does not establish physical-device coverage, Creator 2 3D coverage, or an
+end-to-end upload/player result.
 
 ### Privacy visual acceptance
 

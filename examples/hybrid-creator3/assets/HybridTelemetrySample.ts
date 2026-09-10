@@ -1,4 +1,5 @@
 import ReplayPrivacy, { ReplayPrivacyMode } from './guance-cocos-sdk/ReplayPrivacy';
+import { Replay3DScene } from './Replay3DScene';
 import {
   _decorator,
   Button,
@@ -78,9 +79,14 @@ class HybridTelemetryRuntime {
   private entered = false;
   private waitingForNativeReturn = false;
   private untrackedXhr?: UntrackedXhrMethods;
+  private sampleCamera?: Camera;
+  private sampleCanvas?: Node;
+  private replay3D?: Replay3DScene;
 
   start(): void {
     const { root, camera } = this.createScene();
+    this.sampleCamera = camera;
+    this.sampleCanvas = root.parent!;
     setReplayCamera(camera);
     this.render(root);
 
@@ -398,7 +404,35 @@ class HybridTelemetryRuntime {
 
     const statusPanel = this.panel(root, 'StatusPanel', 0, -180, 780, 84, COLORS.panel);
     this.status = this.label(statusPanel, 'Preparing Hybrid integration…', 0, 0, 730, 50, 18, COLORS.muted);
-    this.label(root, `View: ${VIEW_NAME}`, 0, -258, 820, 24, 15, COLORS.muted);
+    this.button(root, 'Replay3D', 'Open 3D Replay scene', 0, -258, 360, 40, () => this.open3DScene(), COLORS.info);
+  }
+
+  private async open3DScene(): Promise<void> {
+    if (this.replay3D || !this.sampleCamera || !this.sampleCanvas) return;
+    this.sampleCamera.enabled = false;
+    this.sampleCanvas.active = false;
+    if (this.privacyMaskProbe) guanceSdk.replay.setPrivacy(this.privacyMaskProbe, 'unmask');
+    const node = new Node('Replay3DValidation');
+    director.getScene()!.addChild(node);
+    this.replay3D = node.addComponent(Replay3DScene);
+    const restore = (): void => {
+      setReplayCamera(this.sampleCamera);
+      this.sampleCamera!.enabled = true;
+      this.sampleCanvas!.active = true;
+      if (this.privacyMaskProbe) guanceSdk.replay.setPrivacy(this.privacyMaskProbe, 'mask');
+      node.active = false;
+      node.destroy();
+      this.replay3D = undefined;
+    };
+    try {
+      await this.replay3D.initialize(restore);
+      setReplayCamera(this.replay3D.camera);
+      if (this.entered) guanceSdk.rum.addAction('replay_3d_scene_opened', 'click', ATTRIBUTES);
+    } catch (error) {
+      restore();
+      this.setStatus(`Unable to load 3D scene: ${String(error)}`, COLORS.danger);
+      console.error('[HybridTelemetrySample] Unable to load 3D scene', error);
+    }
   }
 
   private panel(parent: Node, name: string, x: number, y: number, width: number, height: number, color: Color, square = false): Node {
