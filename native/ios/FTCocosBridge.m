@@ -1,7 +1,14 @@
 #import "FTCocosBridge.h"
 #import "FTCocosReplayImageJobs.h"
 
-#import "FTMobileSDK.h"
+#import "FTMobileAgent.h"
+#import "FTSDKConfig.h"
+#import "FTRumConfig.h"
+#import "FTLoggerConfig.h"
+#import "FTMobileConfig.h"
+#import "FTExternalDataManager.h"
+#import "FTResourceMetricsModel.h"
+#import "FTResourceContentModel.h"
 #import "FTSessionReplay.h"
 #import <UIKit/UIKit.h>
 #import <objc/message.h>

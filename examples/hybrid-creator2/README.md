@@ -116,3 +116,13 @@ endpoint served by your instrumented backend; keep the existing
 Call the exported `leaveHybridCocos()` only when a real Hybrid host removes the
 Cocos container and returns to native UI. Do not call it during ordinary Cocos
 scene changes.
+
+### Using Swift Package Manager on iOS
+
+Set `ios.dependencyManager` to `"spm"` in a project-root
+`cocos-sdk.config.json` before rebuilding in Creator, then run the existing
+`native:install` command with your iOS build directory. Both the SDK bridge and
+native sample host are linked through SPM. Open the generated `.xcodeproj` for a
+fresh project; CocoaPods is only needed when migrating an existing Pods
+installation or managing other host dependencies. See the root README for the
+configuration and migration details.

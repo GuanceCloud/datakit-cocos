@@ -22,6 +22,7 @@ function installNative(buildRoot, extensionRoot, logger = console) {
   buildRoot = path.resolve(buildRoot);
   extensionRoot = path.resolve(extensionRoot);
   if (!fs.existsSync(buildRoot)) return;
+  const dependencyManager = readIosDependencyManager(buildRoot, extensionRoot);
   const nativeSource = path.join(extensionRoot, 'native');
   if (!fs.existsSync(nativeSource)) {
     logger.warn(`[cocos-sdk] Native bridge not found at ${nativeSource}`);
@@ -47,7 +48,11 @@ function installNative(buildRoot, extensionRoot, logger = console) {
   const iosApplicationProjects = xcodeProjects
     .map((projectFile) => ({ projectFile, target: findIosApplicationTarget(projectFile) }))
     .filter((project) => project.target);
-  if (podfiles.length === 0) {
+  if (dependencyManager === 'spm' && iosApplicationProjects.length > 0) {
+    migrateManagedPods(podfiles, logger);
+    copyDirectory(path.join(nativeSource, 'ios'), path.join(buildNative, 'FTCocosBridge'));
+  }
+  if (dependencyManager === 'cocoapods' && podfiles.length === 0) {
     iosApplicationProjects.forEach(({ projectFile, target }) => {
       const projectDirectory = path.dirname(path.dirname(projectFile));
       const podfile = path.join(projectDirectory, 'Podfile');
@@ -57,12 +62,17 @@ function installNative(buildRoot, extensionRoot, logger = console) {
   }
   iosApplicationProjects.forEach(({ projectFile, target }) => {
     patchCocos2IosConfiguration(projectFile, target);
+    if (dependencyManager === 'spm') {
+      require('./install-spm.cjs').installSwiftPackage(projectFile, path.join(buildNative, 'FTCocosBridge'), 'FTCocosBridge', target);
+    } else if (fs.readFileSync(projectFile, 'utf8').includes('XCLocalSwiftPackageReference')) {
+      require('./install-spm.cjs').removeSwiftPackages(projectFile);
+    }
   });
   gradleFiles.forEach((file) => patchGradle(file, buildNative));
   gradlePropertiesFiles.forEach(patchGradleProperties);
-  podfiles.forEach((file) => patchPodfile(file, buildNative));
+  if (dependencyManager === 'cocoapods') podfiles.forEach((file) => patchPodfile(file, buildNative));
   logger.info(
-    `[cocos-sdk] Installed native bridge (${gradleFiles.length} Android, ${podfiles.length} iOS project files).`,
+    `[cocos-sdk] Installed native bridge (${gradleFiles.length} Android, ${dependencyManager === 'spm' ? iosApplicationProjects.length : podfiles.length} iOS project files; iOS: ${dependencyManager}).`,
   );
 }
 
@@ -298,6 +308,10 @@ function replaceIndentedMarkedBlock(contents, begin, end, block) {
 
 function findIosApplicationTarget(projectFile) {
   const contents = fs.readFileSync(projectFile, 'utf8');
+  if (contents.includes('COCOS_SDK_XCODE_PROJECT')) {
+    const { readProject, applicationTarget } = require('./install-spm.cjs');
+    return applicationTarget(readProject(projectFile))?.[1].name || null;
+  }
   const nativeTarget = /\/\* ([^*]+) \*\/ = \{\s*isa = PBXNativeTarget;([\s\S]*?)\n\s*\};/g;
   const targets = [];
   let match;
@@ -382,4 +396,58 @@ function escapeGroovy(value) { return value.replace(/\\/g, '\\\\').replace(/'/g,
 function escapeRuby(value) { return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
 function escapeRegExp(value) { return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
-module.exports = { installNative };
+function readIosDependencyManager(buildRoot, extensionRoot) {
+  for (const start of [buildRoot, extensionRoot]) {
+    let directory = path.resolve(start);
+    while (true) {
+      const file = path.join(directory, 'cocos-sdk.config.json');
+      if (fs.existsSync(file)) {
+        const config = JSON.parse(fs.readFileSync(file, 'utf8'));
+        const manager = config.ios?.dependencyManager ?? 'cocoapods';
+        if (!['spm', 'cocoapods'].includes(manager)) {
+          throw new Error(`[cocos-sdk] Invalid ios.dependencyManager in ${file}: expected spm or cocoapods.`);
+        }
+        return manager;
+      }
+      const parent = path.dirname(directory);
+      if (parent === directory) break;
+      directory = parent;
+    }
+  }
+  return 'cocoapods';
+}
+
+function migrateManagedPods(podfiles, logger) {
+  for (const file of podfiles) {
+    const original = fs.readFileSync(file, 'utf8');
+    let next = original;
+    for (const [begin, end] of [
+      [POD_BEGIN, POD_END], [LEGACY_POD_BEGIN, LEGACY_POD_END], [LEGACY_BEGIN, LEGACY_END],
+      ['# COCOS_HYBRID_SAMPLE_BEGIN', '# COCOS_HYBRID_SAMPLE_END'],
+    ]) next = next.replace(markedPattern(begin, end), '');
+    if (/^\s*pod\s+['"](?:FTCocosBridge|HybridSampleHost|GuanceSDK)(?:\/[^'"]*)?['"]/m.test(next)) {
+      throw new Error(`[cocos-sdk] Remove the manually declared native SDK Pod from ${file} before switching to SPM.`);
+    }
+    if (next !== original) fs.writeFileSync(file, next);
+    const directory = path.dirname(file);
+    const existingLock = path.join(directory, 'Podfile.lock');
+    const hasSDKPods = fs.existsSync(existingLock)
+      && /^\s*- (?:FTCocosBridge|HybridSampleHost|GuanceSDK)(?:\/|\s|:)/m.test(fs.readFileSync(existingLock, 'utf8'));
+    if (next === original && !hasSDKPods) continue;
+    if (fs.existsSync(path.join(directory, 'Podfile.lock')) || fs.existsSync(path.join(directory, 'Pods'))) {
+      logger.info('[cocos-sdk] Updating existing Pods integration for the SPM switch.');
+      try {
+        execFileSync('pod', ['install'], { cwd: directory, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 });
+      } catch (error) {
+        fs.writeFileSync(file, original);
+        throw new Error(`[cocos-sdk] Unable to update existing Pods in ${directory}: ${error.message}`);
+      }
+      const lock = path.join(directory, 'Podfile.lock');
+      if (fs.existsSync(lock) && /^\s*- GuanceSDK(?:\/|\s|:)/m.test(fs.readFileSync(lock, 'utf8'))) {
+        throw new Error(`[cocos-sdk] Another Pod still depends on the native SDK in ${lock}; migrate that dependency before using SPM.`);
+      }
+    }
+  }
+}
+
+module.exports = { installNative, readIosDependencyManager };

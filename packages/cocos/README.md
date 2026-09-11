@@ -18,6 +18,42 @@ Guance Cloud Application Monitoring collects and analyzes RUM, Log, Trace, and S
 
 Cocos Creator 3.0–3.6.2 is supported on a best-effort basis because the stable native build extension API starts at 3.6.3. Web, mini-game, and desktop targets are not currently supported.
 
+## iOS dependency manager
+
+CocoaPods remains the default. To use Swift Package Manager, add
+`cocos-sdk.config.json` to your **Cocos project root** (beside `assets`):
+
+```json
+{
+  "ios": {
+    "dependencyManager": "spm"
+  }
+}
+```
+
+Alternatively, save this setting when installing the extension:
+
+```sh
+npx @cloudcare/cocos-sdk install --ios-dependency-manager spm
+```
+
+Rebuild the native iOS project in Creator after changing the configuration. The
+extension links the local `FTCocosBridge` package and Xcode resolves the pinned
+iOS SDK from Git. Fresh SPM projects do not require `pod install`; open the
+`.xcodeproj`. If the host uses CocoaPods for other libraries, continue opening
+its `.xcworkspace`.
+
+When switching an existing installation, the extension removes its managed SDK
+Pod entries and runs `pod install` if Pods were previously installed. Other Pods
+are preserved. Manually declared SDK Pods or other Pods that depend on the same
+native SDK must be migrated first to avoid duplicate linking. Set the value to
+`cocoapods` to switch back, then run `pod install` as usual.
+
+Creator 3 CMake regeneration restores the package integration automatically during
+Xcode builds. If you regenerate the project by running CMake separately, rerun
+Creator's native build integration before opening Xcode. Hybrid examples use the
+same configuration with their existing `native:install` command.
+
 ## Examples
 
 [Guance Cloud SDK Cocos Creator Demo](https://github.com/GuanceCloud/datakit-cocos/tree/main/examples)

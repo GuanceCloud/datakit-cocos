@@ -28,6 +28,16 @@ const container = creatorMajor === 2 ? 'packages' : 'extensions';
 const destination = path.join(projectRoot, container, 'guance-cocos-sdk');
 const legacyDestination = path.join(projectRoot, container, 'ft-cocos-sdk');
 const extensionSource = path.join(packageRoot, 'extensions', `creator${creatorMajor}`);
+const manager = readOption(rawArguments, '--ios-dependency-manager');
+if (manager !== undefined && !['spm', 'cocoapods'].includes(manager)) {
+  fail('Invalid --ios-dependency-manager. Expected spm or cocoapods.');
+}
+const configFile = path.join(projectRoot, 'cocos-sdk.config.json');
+const config = readJson(configFile) || {};
+if (manager !== undefined) {
+  config.ios = { ...config.ios, dependencyManager: manager };
+  fs.writeFileSync(configFile, `${JSON.stringify(config, null, 2)}\n`);
+}
 
 copyDirectory(extensionSource, destination);
 copyDirectory(path.join(packageRoot, 'native'), path.join(destination, 'native'));
@@ -119,6 +129,7 @@ function printHelp() {
     'Options:',
     '  --project <path>  Cocos project root (defaults to the current directory)',
     '  --creator <2|3>   Override automatic Cocos Creator version detection',
+    '  --ios-dependency-manager <spm|cocoapods>  Save the iOS dependency manager in cocos-sdk.config.json',
     '  -h, --help        Show this help',
     '',
   ].join('\n'));

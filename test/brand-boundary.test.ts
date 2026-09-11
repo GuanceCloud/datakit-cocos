@@ -41,6 +41,7 @@ const requiredDistributionIdentifiers = [
   'guance-cocos-sdk',
   'guance-cocos',
   'mvnrepo.guance.com',
+  'GuanceSDK', // CocoaPods identity used to detect duplicate native SDK integration.
 ];
 
 describe('shared-code brand boundary', () => {

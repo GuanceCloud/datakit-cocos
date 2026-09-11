@@ -1,8 +1,17 @@
 #import "HybridSampleSDK.h"
 #import "HybridSampleEnvironment.generated.h"
 
+#if __has_include("FTMobileSDK.h")
 #import <GuanceSDK/GuanceSDK.h>
 #import <GuanceSDK/GuanceSessionReplay.h>
+#else
+#import "FTMobileAgent.h"
+#import "FTSDKConfig.h"
+#import "FTRumConfig.h"
+#import "FTLoggerConfig.h"
+#import "FTMobileConfig.h"
+#import "FTSessionReplay.h"
+#endif
 
 static BOOL FTHybridNativePageVisible = YES;
 static __weak UIViewController *FTHybridNativePageController;

@@ -6,6 +6,7 @@ async function stageExtension(flavor) {
   const destination = `${packageRoot}/extensions/${flavor}`;
   await cp(`integrations/${flavor}`, destination, { recursive: true, filter: stageFilter });
   await cp('integrations/shared/install-native.cjs', `${destination}/install-native.cjs`);
+  await cp('integrations/shared/install-spm.cjs', `${destination}/install-spm.cjs`);
 }
 
 function stageFilter(source) {
