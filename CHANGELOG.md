@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.0-alpha.5
+
+### Features
+
+- **iOS Swift Package Manager integration**: Add configurable CocoaPods or SPM installation for Creator 2 and Creator 3, including Hybrid native hosts. CocoaPods remains the default; the installer preserves the selected dependency manager and restores SPM references after Creator 3 CMake regeneration.
+
+### Improvements
+
+- **Native network SDK dependencies**: Upgrade Android Agent to `1.7.6-alpha03` and the Hybrid sample's Gradle Plugin to `1.3.9-alpha01`. Upgrade iOS Agent and Session Replay to `1.6.8-alpha.5` for both CocoaPods and SPM. The iOS version adds independently enabled NSURLConnection Resource collection and Trace correlation; both new switches default to disabled.
+- **Network verification samples**: Add Creator 2 Android engine HTTP requests and opt-in iOS NSURLConnection requests to the Hybrid samples. Document how to verify uploaded Resources and prevent duplicate collection when JS or manual instrumentation overlaps native collection.
+- **Creator 3 Replay sample**: Add a native 3D validation scene with camera, motion, and independent HUD controls to inspect capture behavior and the current single-camera limitation.
+
 ## 0.1.0-alpha.4
 
 ### Features

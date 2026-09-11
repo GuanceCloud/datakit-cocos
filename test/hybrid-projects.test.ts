@@ -155,7 +155,7 @@ describe('Complete Hybrid Creator sample projects', () => {
     expect(gradle).toContain("apply plugin: 'ft-plugin'");
     expect(gradle).toContain("implementation 'com.squareup.okhttp3:okhttp:4.5.0'");
     expect(rootGradle).toContain(
-      "classpath 'com.cloudcare.ft.mobile.sdk.tracker.plugin:ft-plugin:1.3.8'",
+      "classpath 'com.cloudcare.ft.mobile.sdk.tracker.plugin:ft-plugin:1.3.9-alpha01'",
     );
     expect(manifest).toContain('android:name="com.cloudcare.cocos.sample.HybridSampleNativeActivity"');
     expect(manifest).toContain('android:name="com.cloudcare.cocos.sample.HybridSampleApplication"');

@@ -262,7 +262,7 @@ function patchGradle(file, nativeRoot) {
     "    maven { url 'https://mvnrepo.guance.com/repository/maven-releases' }",
     '}',
     'dependencies {',
-    "    implementation 'com.cloudcare.ft.mobile.sdk.tracker.agent:ft-sdk:1.7.6-alpha02'",
+    "    implementation 'com.cloudcare.ft.mobile.sdk.tracker.agent:ft-sdk:1.7.6-alpha03'",
     "    implementation 'com.cloudcare.ft.mobile.sdk.tracker.agent:ft-native:1.1.3'",
     "    implementation 'com.cloudcare.ft.mobile.sdk.tracker.agent:ft-session-replay:0.1.9-alpha03'",
     "    implementation 'com.google.code.gson:gson:2.10.1'",

@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'FTCocosBridge'
-  s.version          = '0.1.0-alpha.4'
+  s.version          = '0.1.0-alpha.5'
   s.summary          = 'CloudCare Mobile SDK native bridge for Cocos Creator.'
   s.homepage         = 'https://github.com/GuanceCloud/datakit-cocos'
   s.license          = { :type => 'Apache-2.0' }
@@ -13,6 +13,6 @@ Pod::Spec.new do |s|
   # Cocos resolves FTCocosBridge by class name at runtime, so no direct symbol
   # reference would otherwise keep the Objective-C category/class in the app.
   s.user_target_xcconfig = { 'OTHER_LDFLAGS' => '$(inherited) -ObjC' }
-  s.dependency 'GuanceSDK/Agent', '1.6.8-alpha.2'
-  s.dependency 'GuanceSDK/FTSessionReplay', '1.6.8-alpha.2'
+  s.dependency 'GuanceSDK/Agent', '1.6.8-alpha.5'
+  s.dependency 'GuanceSDK/FTSessionReplay', '1.6.8-alpha.5'
 end

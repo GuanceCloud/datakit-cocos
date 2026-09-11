@@ -150,6 +150,7 @@ function patchGradle(file, androidHostRoot) {
     "apply plugin: 'ft-plugin'",
     'FTExt {',
     '    showLog = true',
+    '    instrumentHttpURLConnection = true',
     '}',
     'dependencies {',
     "    implementation 'com.squareup.okhttp3:okhttp:4.5.0'",
@@ -167,7 +168,7 @@ function patchFTPluginClasspath(file) {
     "    maven { url 'https://mvnrepo.guance.com/repository/maven-releases' }",
     '}',
     'dependencies {',
-    "    classpath 'com.cloudcare.ft.mobile.sdk.tracker.plugin:ft-plugin:1.3.8'",
+    "    classpath 'com.cloudcare.ft.mobile.sdk.tracker.plugin:ft-plugin:1.3.9-alpha01'",
     '}',
     FT_PLUGIN_END,
   ].join('\n');

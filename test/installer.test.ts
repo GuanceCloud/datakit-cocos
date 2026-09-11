@@ -77,10 +77,10 @@ describe('native build integration', () => {
     const installer = readFileSync(resolve('integrations/shared/install-native.cjs'), 'utf8');
     const podspec = readFileSync(resolve('native/ios/FTCocosBridge.podspec'), 'utf8');
 
-    expect(installer).toContain('ft-sdk:1.7.6-alpha02');
+    expect(installer).toContain('ft-sdk:1.7.6-alpha03');
     expect(installer).toContain('ft-session-replay:0.1.9-alpha03');
-    expect(podspec).toContain("s.dependency 'GuanceSDK/Agent', '1.6.8-alpha.2'");
-    expect(podspec).toContain("s.dependency 'GuanceSDK/FTSessionReplay', '1.6.8-alpha.2'");
+    expect(podspec).toContain("s.dependency 'GuanceSDK/Agent', '1.6.8-alpha.5'");
+    expect(podspec).toContain("s.dependency 'GuanceSDK/FTSessionReplay', '1.6.8-alpha.5'");
   });
 
   it('patches generated Gradle and Pod projects idempotently', () => {

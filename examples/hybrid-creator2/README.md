@@ -58,7 +58,9 @@ The command is idempotent. On Android it registers `HybridSampleApplication`,
 which installs the SDK before the first Activity and then enables lifecycle
 tracking. It also keeps an idempotent `HybridSampleSdk.start()` fallback in
 `AppActivity.onCreate`, makes `HybridSampleNativeActivity` the launcher,
-applies `ft-plugin:1.3.8`, and adds OkHttp for the native automatic request.
+applies `ft-plugin:1.3.9-alpha01`, and adds OkHttp for the native automatic request.
+The Agent dependency is `1.7.6-alpha03`; the native owner enables both
+`setEnableTraceUserResource(true)` and `setEnableHttpURLConnectionResource(true)`.
 Because Creator 2 terminates its process when `Cocos2dxActivity` is destroyed,
 the installer runs that Activity in the app-local `:cocos` process and enables
 SDK collection outside the main process. The native main process remains alive
@@ -73,8 +75,8 @@ directory, then open the resulting `.xcworkspace` and run the `-mobile` target.
 
 ## 3. Generate verification data
 
-The app first shows a native page. Tap `Native Auto Network`, then `Open Cocos
-Page`. After the Cocos screen becomes active, keep it open for at least ten
+The app first shows a native page. Tap `Native Auto Network`, `Cocos HTTP 200`,
+and `Cocos HTTP 404`, then `Open Cocos Page`. After the Cocos screen becomes active, keep it open for at least ten
 seconds and tap each button:
 
 - `Auto Network`: one automatically tracked XHR Resource with Trace headers
@@ -116,6 +118,54 @@ endpoint served by your instrumented backend; keep the existing
 Call the exported `leaveHybridCocos()` only when a real Hybrid host removes the
 Cocos container and returns to native UI. Do not call it during ordinary Cocos
 scene changes.
+
+### Android Cocos HTTP automatic collection
+
+`Cocos HTTP 200` and `Cocos HTTP 404` call the engine's real
+`Cocos2dxHttpURLConnection` creation, connection, response-reading, and disconnect
+methods through `HybridCocosHttpRequest`. The helper shares the engine package
+to access these package-private methods; it does not wrap connections, inject
+Trace headers, or call manual Resource APIs. `ft-plugin` instruments the
+`URL.openConnection()` inside the engine class.
+
+Filter RUM Resources by `collection=cocos-urlconnection` in the URL and match the
+unique `request_id` shown on the page or in `adb logcat -s CocosHttpSample`. Each
+click should produce one Resource with method GET, the returned HTTP status,
+response size, duration, and the linked Trace identifiers. The log also shows
+the connection class (`com.ft.sdk.FTHttpsURLConnection` for the default HTTPS
+endpoints). HTTP completion on the page alone does not prove collection; check
+the Resource payload and ensure there is no duplicate for the request ID.
+
+These buttons intentionally run in the native main process, where this sample
+initializes the Android SDK. They verify the Cocos engine HTTP class and bypass
+JS automatic tracking. They do not establish automatic collection for XHR in
+the separate `:cocos` process, which currently forwards JS telemetry to the main
+process through the bridge and does not initialize its own Android SDK.
+
+### iOS NSURLConnection automatic collection
+
+The sample and bridge use GuanceSDK **1.6.8-alpha.5**. To exercise the legacy
+network API, add `-SampleURLConnection YES` to the Xcode scheme's launch
+arguments, rebuild, and click **Native Auto Network**. This calls
+`sendNativeURLConnectionRequest()` and enables both
+`FTRumConfig.enableTraceURLConnectionResource` and
+`FTTraceConfig.enableAutoTraceURLConnection`. Neither flag is enabled by default.
+Use `-SampleURLConnection NO` to return to the default NSURLSession request.
+
+Match `layer=native-urlconnection` and the unique `request_id` in the URL against
+the uploaded RUM Resource. Confirm one Resource per request, HTTP method/status,
+duration, and Trace identifiers; a successful HTTP response alone does not prove
+Resource collection.
+
+Cocos JS automatic tracking and native tracking can collect the same XHR twice.
+Creator 2.4.9/2.4.15 uses NSURLConnection; Creator 3.8.8 uses NSURLSession.
+For the NSURLConnection probe, the native button bypasses JS tracking. Before
+also exercising Cocos **Auto Network** with native collection enabled, disable
+`autoTrack.network` to let the native layer own those requests. The manual
+Resource button still reports explicitly: saved XHR methods only bypass JS
+instrumentation, so native collection can duplicate that manual Resource too.
+For production, choose one collection owner for each request path; preserve
+native collection for independent host requests where possible.
 
 ### Using Swift Package Manager on iOS
 

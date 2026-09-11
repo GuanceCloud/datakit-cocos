@@ -10,6 +10,6 @@ Pod::Spec.new do |s|
   s.source_files     = 'HybridSampleSDK.{h,m}', 'HybridSampleEnvironment.generated.h'
   s.public_header_files = 'HybridSampleSDK.h'
   s.requires_arc     = true
-  s.dependency 'GuanceSDK/Agent', '1.6.8-alpha.2'
-  s.dependency 'GuanceSDK/FTSessionReplay', '1.6.8-alpha.2'
+  s.dependency 'GuanceSDK/Agent', '1.6.8-alpha.5'
+  s.dependency 'GuanceSDK/FTSessionReplay', '1.6.8-alpha.5'
 end

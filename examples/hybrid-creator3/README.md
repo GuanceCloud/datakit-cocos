@@ -67,7 +67,7 @@ tracking normally inserted by `ft-plugin`. It also keeps an idempotent
 `HybridSampleSdk.start()` fallback in `AppActivity.onCreate`. On iOS it adds
 `[HybridSampleSDK start]` to `didFinishLaunchingWithOptions`. For Creator 3
 Android it makes `HybridSampleNativeActivity` the launcher, applies
-`ft-plugin:1.3.8`, and adds the OkHttp dependency used by the native automatic
+`ft-plugin:1.3.9-alpha01`, and adds the OkHttp dependency used by the native automatic
 network button. The native client deliberately uses
 `OkHttpClient.Builder().build()` so the plugin can inject Resource and Trace
 interceptors.
@@ -162,6 +162,31 @@ methods to avoid duplicate Resource collection.
 Call the exported `leaveHybridCocos()` only when a real Hybrid host removes the
 Cocos container and returns to native UI. Do not call it during ordinary Cocos
 scene changes.
+
+### iOS NSURLConnection automatic collection
+
+The sample and bridge use GuanceSDK **1.6.8-alpha.5**. To exercise the legacy
+network API, add `-SampleURLConnection YES` to the Xcode scheme's launch
+arguments, rebuild, and click **Native Auto Network**. This calls
+`sendNativeURLConnectionRequest()` and enables both
+`FTRumConfig.enableTraceURLConnectionResource` and
+`FTTraceConfig.enableAutoTraceURLConnection`. Neither flag is enabled by default.
+Use `-SampleURLConnection NO` to return to the default NSURLSession request.
+
+Match `layer=native-urlconnection` and the unique `request_id` in the URL against
+the uploaded RUM Resource. Confirm one Resource per request, HTTP method/status,
+duration, and Trace identifiers; a successful HTTP response alone does not prove
+Resource collection.
+
+Cocos JS automatic tracking and native tracking can collect the same XHR twice.
+Creator 2.4.9/2.4.15 uses NSURLConnection; Creator 3.8.8 uses NSURLSession.
+For the NSURLConnection probe, the native button bypasses JS tracking. Before
+also exercising Cocos **Auto Network** with native collection enabled, disable
+`autoTrack.network` to let the native layer own those requests. The manual
+Resource button still reports explicitly: saved XHR methods only bypass JS
+instrumentation, so native collection can duplicate that manual Resource too.
+For production, choose one collection owner for each request path; preserve
+native collection for independent host requests where possible.
 
 ### Using Swift Package Manager on iOS
 
