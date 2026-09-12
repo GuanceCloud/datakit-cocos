@@ -1,4 +1,4 @@
-import type { FTNativeTransport } from './transport.js';
+import type { FTNativeTransport } from '@cloudcare/cocos-sdk/plugin-api';
 import { parseTransportResponse } from './transport.js';
 
 /** Polls a single native worker without keeping a synchronous bridge call open. */

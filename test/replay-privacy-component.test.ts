@@ -6,9 +6,9 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as creator3Engine from 'cc';
-import { FTCreator2CanvasCapture } from '../src/creator2/capture';
-import { FTCreator3CanvasCapture } from '../src/creator3/capture';
-import { applyPrivacyRegions } from '../src/core/replay';
+import { FTCreator2CanvasCapture } from '../src/session-replay/creator2/capture';
+import { FTCreator3CanvasCapture } from '../src/session-replay/creator3/capture';
+import { applyPrivacyRegions } from '../src/session-replay/core/replay';
 
 const state = vi.hoisted(() => ({ scene: undefined as any }));
 vi.mock('cc', () => ({
@@ -45,7 +45,7 @@ vi.mock('cc', () => ({
 
 // Execute the actual distributed asset scripts, including their enum and getter.
 function loadComponent(creator: number): any {
-  const source = readFileSync(`components/creator${creator}/ReplayPrivacy.ts`, 'utf8');
+  const source = readFileSync(`src/session-replay/components/creator${creator}/ReplayPrivacy.ts`, 'utf8');
   const compiled = ts.transpileModule(source, {
     compilerOptions: {
       target: ts.ScriptTarget.ES2018,

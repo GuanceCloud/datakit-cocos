@@ -1,4 +1,4 @@
-name: Publish npm package
+name: Publish npm packages
 
 on:
   push:
@@ -11,110 +11,48 @@ concurrency:
 
 jobs:
   verify:
-    name: Verify package
+    name: Verify package pair
     if: github.repository == 'GuanceCloud/datakit-cocos'
     runs-on: ubuntu-latest
     permissions:
       contents: read
-
     steps:
       - uses: actions/checkout@v6
-
       - uses: actions/setup-node@v6
         with:
           node-version: "24"
           package-manager-cache: false
-
       - run: npm ci
+      - run: node scripts/publish-npm-token.mjs --check
       - run: npm run typecheck
       - run: npm test
       - run: npm run test:release-policy
+      - run: npm run test:publish-token
       - run: npm run build
+      - run: npm run test:packed
 
   publish:
-    name: Publish package
+    name: Publish base SDK then Session Replay
     needs: verify
     runs-on: ubuntu-latest
     environment: npm-publish
     permissions:
       contents: read
       id-token: write
-
     steps:
       - uses: actions/checkout@v6
-
       - uses: actions/setup-node@v6
         with:
           node-version: "24"
-          registry-url: "https://registry.npmjs.org"
           package-manager-cache: false
-
       - run: npm ci
-      - run: npm run build
-
-      - name: Validate version and select npm dist-tag
-        id: release
-        env:
-          RELEASE_GIT_TAG: ${{ github.ref_name }}
-        run: |
-          node <<'NODE'
-          const fs = require('node:fs');
-
-          const rootVersion = require('./package.json').version;
-          const packageVersion = require('./packages/cocos/package.json').version;
-          const sdkSource = fs.readFileSync('./src/core/version.ts', 'utf8');
-          const podspecSource = fs.readFileSync('./native/ios/FTCocosBridge.podspec', 'utf8');
-          const sdkVersion = sdkSource.match(/FT_COCOS_SDK_VERSION\s*=\s*'([^']+)'/)?.[1];
-          const podspecVersion = podspecSource.match(/s\.version\s*=\s*'([^']+)'/)?.[1];
-          const gitTag = process.env.RELEASE_GIT_TAG;
-
-          if (!gitTag?.startsWith('agent_')) {
-            throw new Error(`Release tag must start with agent_: ${gitTag}`);
-          }
-
-          const gitVersion = gitTag.slice('agent_'.length);
-          const versions = {
-            'root package': rootVersion,
-            'npm package': packageVersion,
-            'SDK runtime': sdkVersion,
-            'iOS podspec': podspecVersion,
-            'Git tag': gitVersion,
-          };
-          const mismatches = Object.entries(versions).filter(([, version]) => version !== packageVersion);
-
-          if (mismatches.length > 0) {
-            const details = Object.entries(versions)
-              .map(([source, version]) => `${source}: ${version ?? '<missing>'}`)
-              .join('\n');
-            throw new Error(`Release versions do not match:\n${details}`);
-          }
-
-          const { selectDistTag } = require('./scripts/release-policy.cjs');
-          (async () => {
-            const url = `https://registry.npmjs.org/@cloudcare%2fcocos-sdk?release_check=${Date.now()}`;
-            const response = await fetch(url);
-            if (!response.ok) throw new Error(`Registry preflight failed: ${response.status}`);
-            const document = await response.json();
-            if (document.name !== '@cloudcare/cocos-sdk' || !document.versions) {
-              throw new Error('Invalid npm package document');
-            }
-            const npmDistTag = selectDistTag(packageVersion, Object.keys(document.versions));
-            fs.appendFileSync(process.env.GITHUB_OUTPUT, `npm_dist_tag=${npmDistTag}\n`);
-            console.log(`Publishing ${packageVersion} with npm dist-tag ${npmDistTag}`);
-            const published = document.versions[packageVersion];
-            if (!published) return;
-            if (published.name !== '@cloudcare/cocos-sdk' || published.gitHead !== process.env.GITHUB_SHA) {
-              throw new Error('Existing npm version has a different release identity');
-            }
-            fs.appendFileSync(process.env.GITHUB_OUTPUT, 'already_published=true\n');
-            console.log('This commit is already published; Jenkins will verify the package contents.');
-          })().catch(error => { console.error(error); process.exitCode = 1; });
-          NODE
-
-      - name: Publish to npm
-        if: steps.release.outputs.already_published != 'true'
-        run: >-
-          npm publish
-          --workspace @cloudcare/cocos-sdk
-          --tag "${{ steps.release.outputs.npm_dist_tag }}"
-          --access public
+      # Both npm packages must trust this repository, workflow and environment.
+      # npm >= 11.5.1 uses GitHub OIDC; no npm token secret is needed.
+      - name: Publish and verify both inspected tarballs
+        run: node scripts/publish-npm-token.mjs --ci
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: npm-release-pair
+          path: artifacts/npm-token-release/
+          if-no-files-found: ignore

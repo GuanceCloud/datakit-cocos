@@ -41,6 +41,20 @@ export class FTReplayBudget {
     this.updatePressure(ratio);
     const hasBurst = priorityKey !== undefined && !this.burstKeys.includes(priorityKey);
     if (ratio >= 1 && !hasBurst) return this.decision(false, 0, used, hasBurst, 'budget');
+    const lastImage = this.entries[this.entries.length - 1];
+    // Pace successful images from the start instead of spending most of the
+    // minute's budget in its first seconds. Reserve 10% for size variation and
+    // key frames; their existing burst allowance remains independent.
+    const sustainableInterval = lastImage
+      ? Math.min(lastImage.byteSize, this.policy.maxFrameBytes) * WINDOW_MS
+        / (this.policy.maxBytesPerMinute * 0.9)
+      : 0;
+    if (
+      this.policy.adaptiveCapture
+      && lastImage
+      && timestamp - lastImage.timestamp < sustainableInterval
+      && !hasBurst
+    ) return this.decision(false, 0, used, hasBurst, 'throttle');
     if (
       this.policy.adaptiveCapture
       && this.pressure !== 'normal'

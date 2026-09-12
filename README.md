@@ -7,7 +7,7 @@
 
 ## Introduction
 
-Guance Cloud Application Monitoring collects and analyzes RUM, Log, Trace, and Session Replay data from Cocos Creator applications. The SDK supports native Android and iOS builds for Cocos Creator 2.4 and 3.x.
+Guance Cloud Application Monitoring collects and analyzes RUM, Log, and Trace data from Cocos Creator applications. The SDK supports native Android and iOS builds for Cocos Creator 2.4 and 3.x.
 
 ## Supported Scope
 
@@ -17,6 +17,18 @@ Guance Cloud Application Monitoring collects and analyzes RUM, Log, Trace, and S
 | `@cloudcare/cocos-sdk/creator3` | 3.6.3–3.8.x | Android API 21+, iOS 12+ |
 
 Cocos Creator 3.0–3.6.2 is supported on a best-effort basis because the stable native build extension API starts at 3.6.3. Web, mini-game, and desktop targets are not currently supported.
+
+## Optional Session Replay
+
+Session Replay is distributed separately as `@cloudcare/cocos-session-replay`.
+Install both packages at the exact same version and run `npx guance-cocos install --replay`.
+Compose the SDK with `withSessionReplay` from the matching `/creator2` or `/creator3` entry
+before using Replay configuration. Camera selection moves to `sdk.setReplayCamera(camera)`.
+
+Base-only applications continue using this package and its normal initialization API.
+Run `npx guance-cocos install --no-replay` and rebuild to remove an existing SDK-managed
+Replay native integration. Existing scene component scripts and metadata are preserved.
+See the [Replay package guide](https://github.com/GuanceCloud/datakit-cocos/tree/main/packages/cocos-session-replay).
 
 ## iOS dependency manager
 

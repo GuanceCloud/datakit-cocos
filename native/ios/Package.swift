@@ -13,11 +13,10 @@ let package = Package(
             name: "FTCocosBridge",
             dependencies: [
                 .product(name: "GuanceSDK", package: "datakit-ios"),
-                .product(name: "GuanceSessionReplay", package: "datakit-ios"),
             ],
             path: ".",
             exclude: ["FTCocosBridge.podspec"],
-            sources: ["FTCocosBridge.m", "FTCocosReplayImageJobs.m"],
+            sources: ["FTCocosBridge.m"],
             publicHeadersPath: "include",
             cSettings: [.headerSearchPath(".")],
             linkerSettings: [.linkedFramework("UIKit")]

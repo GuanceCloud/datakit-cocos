@@ -5,7 +5,7 @@ import {
 } from './replay-encoding.js';
 import { FTReplayBudget } from './replay-budget.js';
 import { emitReplayDiagnostic, replayUtf8ByteLength } from './replay-diagnostics.js';
-import type { FTNativeTransport } from './transport.js';
+import type { FTNativeTransport } from '@cloudcare/cocos-sdk/plugin-api';
 import type {
   FTCapturedFrame,
   FTHybridSessionReplayConfig,
@@ -42,6 +42,9 @@ export interface FTReplayPointerSource {
 }
 
 const MAX_PENDING_POINTER_EVENTS = 512;
+// Approximate comparisons must not hide small animations indefinitely.
+const MAX_APPROXIMATE_STATIC_MS = 2_000;
+const SAMPLE_TILE_SIZE = 32;
 
 export interface FTReplaySaveImageV2Result {
   resourceId: string;
@@ -59,6 +62,7 @@ export interface FTReplayFrameSample {
   width: number;
   height: number;
   luminance: Uint8Array;
+  rgb: Uint8Array;
 }
 
 /** Cocos canvas Session Replay controls. */
@@ -76,6 +80,7 @@ export class FTSessionReplay {
   private lastContextKey: string | undefined;
   private lastPrivacyKey: string | undefined;
   private lastFrameSample: FTReplayFrameSample | undefined;
+  private lastImageTimestamp: number | undefined;
   private lastImageSize: { width: number; height: number } | undefined;
   private lastViewportSize: { width: number; height: number } | undefined;
   private imagePolicyEnabled = false;
@@ -89,6 +94,7 @@ export class FTSessionReplay {
     private readonly transport: FTNativeTransport,
     private readonly capture: FTCanvasCapture,
     private readonly pointerSource?: FTReplayPointerSource,
+    private readonly validateNative?: () => void,
   ) {}
 
   /**
@@ -105,6 +111,7 @@ export class FTSessionReplay {
     samplingRate(config.sampleRate, 'replay.sampleRate');
     samplingRate(config.sessionOnErrorSampleRate, 'replay.sessionOnErrorSampleRate');
     this.configureCapture(config);
+    this.validateNative?.();
     this.transport.invoke('replay.configure', config as never);
     this.mode = 'standalone';
     this.startCapture();
@@ -240,10 +247,14 @@ export class FTSessionReplay {
       const sample = sampleReplayFrame(frame.rgba, frame.width, frame.height);
       const comparable = contextKey === this.lastContextKey
         && !viewportChanged
+        && frame.width === this.lastFrameSample?.width
+        && frame.height === this.lastFrameSample?.height
         && privacyKey === this.lastPrivacyKey;
       const duplicate = comparable && fingerprint === this.lastFingerprint;
       const approximatelyStatic = comparable
         && !duplicate
+        && this.lastImageTimestamp !== undefined
+        && now - this.lastImageTimestamp < MAX_APPROXIMATE_STATIC_MS
         && replayFramesLookSimilar(this.lastFrameSample, sample);
       if (duplicate || approximatelyStatic) {
         emitReplayDiagnostic({
@@ -302,6 +313,7 @@ export class FTSessionReplay {
       this.lastContextKey = contextKey;
       this.lastPrivacyKey = privacyKey;
       this.lastFrameSample = sample;
+      this.lastImageTimestamp = now;
       this.lastImageSize = { width: saved.width, height: saved.height };
       this.lastViewportSize = viewportSize;
       return true;
@@ -333,6 +345,7 @@ export class FTSessionReplay {
     this.lastContextKey = undefined;
     this.lastPrivacyKey = undefined;
     this.lastFrameSample = undefined;
+    this.lastImageTimestamp = undefined;
     this.lastImageSize = undefined;
     this.lastViewportSize = undefined;
     this.budget.reset();
@@ -548,14 +561,18 @@ export function sampleReplayFrame(
   }
   const sampleCount = Math.min(maximumSamples, pixelCount);
   const luminance = new Uint8Array(sampleCount);
+  const rgb = new Uint8Array(sampleCount * 3);
   for (let index = 0; index < sampleCount; index += 1) {
     const pixel = Math.min(pixelCount - 1, Math.floor(index * pixelCount / sampleCount));
     const offset = pixel * 4;
+    rgb[index * 3] = rgba[offset]!;
+    rgb[index * 3 + 1] = rgba[offset + 1]!;
+    rgb[index * 3 + 2] = rgba[offset + 2]!;
     luminance[index] = Math.round(
       (rgba[offset]! * 54 + rgba[offset + 1]! * 183 + rgba[offset + 2]! * 19) / 256,
     );
   }
-  return { width, height, luminance };
+  return { width, height, luminance, rgb };
 }
 
 export function replayFramesLookSimilar(
@@ -570,10 +587,29 @@ export function replayFramesLookSimilar(
   ) return false;
   let totalDifference = 0;
   let changedSamples = 0;
+  const tileColumns = Math.ceil(current.width / SAMPLE_TILE_SIZE);
+  const tileCount = tileColumns * Math.ceil(current.height / SAMPLE_TILE_SIZE);
+  const tileSamples = new Uint16Array(tileCount);
+  const tileChanges = new Uint16Array(tileCount);
   for (let index = 0; index < current.luminance.length; index += 1) {
     const difference = Math.abs(current.luminance[index]! - previous.luminance[index]!);
     totalDifference += difference;
     if (difference >= 12) changedSamples += 1;
+    const pixel = Math.floor(index * current.width * current.height / current.luminance.length);
+    const tile = Math.floor(Math.floor(pixel / current.width) / SAMPLE_TILE_SIZE) * tileColumns
+      + Math.floor((pixel % current.width) / SAMPLE_TILE_SIZE);
+    tileSamples[tile]! += 1;
+    const offset = index * 3;
+    // Color-only changes also matter, even when their luminance is unchanged.
+    if (Math.max(
+      Math.abs(current.rgb[offset]! - previous.rgb[offset]!),
+      Math.abs(current.rgb[offset + 1]! - previous.rgb[offset + 1]!),
+      Math.abs(current.rgb[offset + 2]! - previous.rgb[offset + 2]!),
+    ) >= 12) tileChanges[tile]! += 1;
+  }
+  for (let tile = 0; tile < tileCount; tile += 1) {
+    // A moving sprite can occupy much less than 1% of the whole screen.
+    if (tileChanges[tile]! >= 2 && tileChanges[tile]! / tileSamples[tile]! >= 0.1) return false;
   }
   const averageDifference = totalDifference / current.luminance.length;
   const changedRatio = changedSamples / current.luminance.length;
@@ -588,9 +624,18 @@ function privacyRegionsKey(regions: FTPrivacyRegion[]): string {
 
 export function frameFingerprint(bytes: Uint8Array): string {
   let hash = 2166136261;
-  const stride = Math.max(1, Math.floor(bytes.length / 8192));
-  for (let index = 0; index < bytes.length; index += stride) {
-    hash ^= bytes[index] || 0;
+  // Sparse hashing can classify changes between sampled bytes as duplicates,
+  // bypassing both local motion detection and the approximate refresh limit.
+  // Read RGBA words without copying normal capture buffers to keep this cheap
+  // on the Cocos JS thread. Mix high bits down so every color channel matters.
+  const aligned = bytes.byteOffset % 4 === 0 ? bytes : bytes.slice();
+  const words = new Uint32Array(aligned.buffer, aligned.byteOffset, Math.floor(aligned.length / 4));
+  for (let index = 0; index < words.length; index += 1) {
+    hash = Math.imul(hash ^ words[index]!, 16777619);
+    hash ^= hash >>> 16;
+  }
+  for (let index = words.length * 4; index < bytes.length; index += 1) {
+    hash ^= bytes[index]!;
     hash = Math.imul(hash, 16777619);
   }
   return `${bytes.length.toString(16)}-${(hash >>> 0).toString(16)}`;

@@ -1,5 +1,8 @@
 import ReplayPrivacy, { ReplayPrivacyMode } from '../guance-cocos-sdk/ReplayPrivacy';
-import { guanceSdk, setReplayCamera } from '@cloudcare/cocos-sdk/creator2';
+import { guanceSdk as baseSdk } from '@cloudcare/cocos-sdk/creator2';
+import { withSessionReplay } from '@cloudcare/cocos-session-replay/creator2';
+
+const guanceSdk = withSessionReplay(baseSdk);
 
 const { ccclass } = cc._decorator;
 
@@ -64,7 +67,7 @@ class HybridTelemetryRuntime {
   start(): void {
     const scene = this.createScene();
     this.replayCamera = scene.camera;
-    setReplayCamera(scene.camera);
+    guanceSdk.setReplayCamera(scene.camera);
     this.render(scene.root);
 
     if (!cc.sys.isNative) {

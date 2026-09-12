@@ -1,8 +1,8 @@
 /// <reference path="../src/creator3/shims.d.ts" />
 
 import { describe, expect, it, vi } from 'vitest';
-import { FTCreator3CanvasCapture } from '../src/creator3/capture';
-import { applyPrivacyRegions } from '../src/core/replay';
+import { FTCreator3CanvasCapture } from '../src/session-replay/creator3/capture';
+import { applyPrivacyRegions } from '../src/session-replay/core/replay';
 
 const state = vi.hoisted(() => ({
   visible: { width: 1920, height: 1080 },

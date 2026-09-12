@@ -145,11 +145,11 @@ function preserveCmakeIntegration(projectFile, project, entry) {
   if (!fs.existsSync(stateFile) || fs.readFileSync(stateFile, 'utf8') !== serialized) fs.writeFileSync(stateFile, serialized);
 }
 
-function removeSwiftPackages(projectFile) {
+function removeSwiftPackages(projectFile, productNames = ['FTCocosBridge', 'FTCocosReplayBridge', 'HybridSampleHost']) {
   const project = readProject(projectFile);
   const objects = project.objects;
   const removed = new Set();
-  for (const productName of ['FTCocosBridge', 'HybridSampleHost']) {
+  for (const productName of productNames) {
     const packageID = identifier(`package:${productName}`);
     if (!objects[packageID]) continue;
     removed.add(packageID);
@@ -159,23 +159,31 @@ function removeSwiftPackages(projectFile) {
       removed.add(identifier(`framework:${id}:${productName}`));
     }
   }
-  if (!removed.size) return;
   for (const id of removed) delete objects[id];
   for (const object of Object.values(objects)) {
     for (const key of ['packageReferences', 'packageProductDependencies', 'files']) {
       if (Array.isArray(object[key])) object[key] = object[key].filter((id) => !removed.has(id));
     }
-    if (object.isa === 'PBXShellScriptBuildPhase') object.shellScript = (object.shellScript || '').replace(restorePattern, '');
+
   }
   const stateFile = path.join(path.dirname(projectFile), 'cocos-sdk-spm.json');
   if (fs.existsSync(stateFile)) {
     const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-    for (const [id, settings] of Object.entries(state.buildLocations)) {
-      if (objects[id]) Object.assign(objects[id].buildSettings ||= {}, settings);
+    state.packages = state.packages.filter(item => !productNames.includes(item.productName));
+    if (state.packages.length) {
+      fs.writeFileSync(stateFile, `${JSON.stringify(state, null, 2)}\n`);
+    } else {
+      for (const [id, settings] of Object.entries(state.buildLocations)) {
+        if (objects[id]) Object.assign(objects[id].buildSettings ||= {}, settings);
+      }
+      for (const object of Object.values(objects)) {
+        if (object.isa === 'PBXShellScriptBuildPhase') object.shellScript = (object.shellScript || '').replace(restorePattern, '');
+      }
+      fs.unlinkSync(stateFile);
+      fs.rmSync(path.join(path.dirname(projectFile), 'cocos-sdk-spm.cjs'), { force: true });
     }
-    fs.unlinkSync(stateFile);
-    fs.rmSync(path.join(path.dirname(projectFile), 'cocos-sdk-spm.cjs'), { force: true });
   }
+
   writeProject(projectFile, project);
 }
 

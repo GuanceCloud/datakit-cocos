@@ -3,7 +3,13 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const brandNeutralTargets = [
-  'src',
+  'src/core',
+  'src/creator2',
+  'src/creator3',
+  'src/session-replay/core',
+  'src/session-replay/creator2',
+  'src/session-replay/creator3',
+  'src/session-replay/components',
   'native/android/src',
   'native/ios/FTCocosBridge.h',
   'native/ios/FTCocosBridge.m',

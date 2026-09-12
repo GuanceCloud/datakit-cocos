@@ -30,7 +30,7 @@ final class FTCocosReplayImageJobs {
         current = job;
         try {
             worker.execute(() -> {
-                String response = FTCocosBridge.invokeLocal(method, payload);
+                String response = FTCocosReplayBridge.invokeLocal(method, payload);
                 synchronized (FTCocosReplayImageJobs.class) {
                     job.response = response;
                 }

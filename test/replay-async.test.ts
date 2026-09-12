@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FTSessionReplay, type FTCanvasCapture } from '../src/core/replay';
-import { invokeReplayAsync } from '../src/core/replay-async-transport';
-import { persistReplayFrame, disposeReplayFrame } from '../src/core/replay-file';
+import { FTSessionReplay, type FTCanvasCapture } from '../src/session-replay/core/replay';
+import { invokeReplayAsync } from '../src/session-replay/core/replay-async-transport';
+import { persistReplayFrame, disposeReplayFrame } from '../src/session-replay/core/replay-file';
 import type { FTNativeTransport } from '../src/core/transport';
 
 function deferred<T>() {

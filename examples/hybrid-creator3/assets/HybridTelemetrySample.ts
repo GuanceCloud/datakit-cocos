@@ -19,7 +19,10 @@ import {
   sys,
   view,
 } from 'cc';
-import { guanceSdk, setReplayCamera } from '@cloudcare/cocos-sdk/creator3';
+import { guanceSdk as baseSdk } from '@cloudcare/cocos-sdk/creator3';
+import { withSessionReplay } from '@cloudcare/cocos-session-replay/creator3';
+
+const guanceSdk = withSessionReplay(baseSdk);
 
 const { ccclass } = _decorator;
 
@@ -87,7 +90,7 @@ class HybridTelemetryRuntime {
     const { root, camera } = this.createScene();
     this.sampleCamera = camera;
     this.sampleCanvas = root.parent!;
-    setReplayCamera(camera);
+    guanceSdk.setReplayCamera(camera);
     this.render(root);
 
     if (!sys.isNative) {
@@ -416,7 +419,7 @@ class HybridTelemetryRuntime {
     director.getScene()!.addChild(node);
     this.replay3D = node.addComponent(Replay3DScene);
     const restore = (): void => {
-      setReplayCamera(this.sampleCamera);
+      guanceSdk.setReplayCamera(this.sampleCamera);
       this.sampleCamera!.enabled = true;
       this.sampleCanvas!.active = true;
       if (this.privacyMaskProbe) guanceSdk.replay.setPrivacy(this.privacyMaskProbe, 'mask');
@@ -426,7 +429,7 @@ class HybridTelemetryRuntime {
     };
     try {
       await this.replay3D.initialize(restore);
-      setReplayCamera(this.replay3D.camera);
+      guanceSdk.setReplayCamera(this.replay3D.camera);
       if (this.entered) guanceSdk.rum.addAction('replay_3d_scene_opened', 'click', ATTRIBUTES);
     } catch (error) {
       restore();
