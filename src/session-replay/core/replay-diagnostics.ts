@@ -1,23 +1,22 @@
 export type FTReplaySkipReason =
   | 'dedupe'
   | 'approx_static'
-  | 'throttle'
-  | 'budget'
+  | 'image_rejected'
   | 'busy'
   | 'error';
 
 export type FTReplayDiagnosticEvent =
-  | { type: 'capture_attempt'; timestamp: number; usedBytes: number; maxBytesPerMinute: number }
+  | { type: 'capture_attempt'; timestamp: number }
   | { type: 'capture_skipped'; timestamp: number; reason: FTReplaySkipReason }
   | {
     type: 'image_saved';
     timestamp: number;
-    byteSize: number;
+    byteSize?: number;
     width: number;
     height: number;
     mimeType?: string;
     priority: boolean;
-    byteSizeSource: 'native' | 'frame_limit_estimate';
+    byteSizeSource: 'native' | 'unavailable';
   }
   | {
     type: 'segment_encoded';

@@ -87,7 +87,7 @@ async function run(pattern: InputPattern, motion: 'large' | 'small' = 'large') {
   const emit = (type: string) => inputState.handlers.get(type)?.forEach((handler) => handler({
     target: { name: 'Attack' }, getID: () => 1, getUILocation: () => ({ x: 50, y: 50 }),
   }));
-  replay.start({ captureFps: 2, touchPrivacy: 'show', imagePolicy: { adaptiveCapture: false } });
+  replay.start({ captureFps: 2, touchPrivacy: 'show', imagePolicy: {} });
   let inputTimer: ReturnType<typeof setInterval> | undefined;
   if (pattern === 'held') emit('down');
   if (pattern === 'repeated') inputTimer = setInterval(() => { emit('down'); emit('up'); }, 50);
@@ -107,7 +107,7 @@ describe('touch input versus replay capture', () => {
   it.each(['held', 'repeated', 'burst'] as const)('preserves image timing and count with %s input', async (pattern) => {
     const baseline = await run('none');
     const touched = await run(pattern);
-    expect(baseline.images).toHaveLength(19);
+    expect(baseline.images).toHaveLength(20);
     expect(touched.images).toEqual(baseline.images);
     expect(touched.times).toEqual(baseline.times);
     expect(touched.pointers.length).toBeGreaterThan(0);

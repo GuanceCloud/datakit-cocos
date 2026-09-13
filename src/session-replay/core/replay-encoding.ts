@@ -3,11 +3,13 @@ import type { FTRUMContext } from './types.js';
 export interface FTReplayImageRecord {
   context: FTRUMContext;
   resourceId: string;
+  /** Logical display bounds, independent of the resource's encoded pixels. */
   width: number;
   height: number;
   mimeType?: `image/${string}`;
   timestamp: number;
   contextChanged: boolean;
+  viewportChanged?: boolean;
   pointerEvents?: FTReplayPointerRecord[];
 }
 
@@ -44,11 +46,11 @@ export function encodeReplayImageRecord(input: FTReplayImageRecord): {
     shapeStyle: null,
   };
   const records: unknown[] = [];
+  if (input.contextChanged || input.viewportChanged) {
+    records.push({ type: 4, data: { width: input.width, height: input.height }, timestamp: input.timestamp });
+  }
   if (input.contextChanged) {
-    records.push(
-      { type: 4, data: { width: input.width, height: input.height }, timestamp: input.timestamp },
-      { type: 6, data: { has_focus: true }, timestamp: input.timestamp },
-    );
+    records.push({ type: 6, data: { has_focus: true }, timestamp: input.timestamp });
   }
   records.push({
     type: 10,

@@ -3,7 +3,6 @@ import {
   encodeReplayPointerRecords,
   type FTReplayPointerRecord,
 } from './replay-encoding.js';
-import { FTReplayBudget } from './replay-budget.js';
 import { emitReplayDiagnostic, replayUtf8ByteLength } from './replay-diagnostics.js';
 import type { FTNativeTransport } from '@cloudcare/cocos-sdk/plugin-api';
 import type {
@@ -54,8 +53,9 @@ export interface FTReplaySaveImageV2Result {
   mimeType?: `image/${string}`;
 }
 
-interface FTReplaySavedImage extends FTReplaySaveImageV2Result {
-  byteSizeSource: 'native' | 'frame_limit_estimate';
+interface FTReplaySavedImage extends Omit<FTReplaySaveImageV2Result, 'byteSize'> {
+  byteSize?: number;
+  byteSizeSource: 'native' | 'unavailable';
 }
 
 export interface FTReplayFrameSample {
@@ -75,13 +75,12 @@ export class FTSessionReplay {
   private captureGeneration = 0;
   private config: Required<Pick<FTSessionReplayConfig, 'captureFps'>> = { captureFps: 1 };
   private imagePolicy: FTResolvedReplayImagePolicy = replayImagePolicy({});
-  private budget = new FTReplayBudget(this.imagePolicy);
   private lastFingerprint: string | undefined;
   private lastContextKey: string | undefined;
   private lastPrivacyKey: string | undefined;
   private lastFrameSample: FTReplayFrameSample | undefined;
   private lastImageTimestamp: number | undefined;
-  private lastImageSize: { width: number; height: number } | undefined;
+  private lastDisplaySize: { width: number; height: number } | undefined;
   private lastViewportSize: { width: number; height: number } | undefined;
   private imagePolicyEnabled = false;
   private supportsSaveImageV2: boolean | undefined;
@@ -159,7 +158,6 @@ export class FTSessionReplay {
     }
     this.config = { captureFps: captureFps(config.captureFps) };
     this.imagePolicy = replayImagePolicy(config);
-    this.budget = new FTReplayBudget(this.imagePolicy);
     // Lossy image MIME must be validated against the deployed player before
     // becoming an implicit default. Supplying imagePolicy opts into V2 now.
     this.imagePolicyEnabled = config.imagePolicy !== undefined;
@@ -202,7 +200,7 @@ export class FTSessionReplay {
     this.busy = true;
     let stored: FTStoredFrame | undefined;
     let context: FTRUMContext | undefined;
-    let pointerSize = this.lastImageSize;
+    let pointerSize = this.lastDisplaySize;
     try {
       context = this.readContext();
       if (!context) return false;
@@ -215,32 +213,26 @@ export class FTSessionReplay {
           viewportSize.width !== this.lastViewportSize.width
           || viewportSize.height !== this.lastViewportSize.height
         );
-      const priorityKey = contextChanged
-        ? contextKey
-        : viewportChanged && viewportSize
-          ? `${contextKey}:${viewportSize.width}x${viewportSize.height}`
-          : undefined;
+      // Do not send coordinates for a new viewport before its image and
+      // metadata have been accepted. Keep pending touches for that capture.
+      if (contextChanged || viewportChanged) pointerSize = undefined;
       const now = Date.now();
-      const decision = this.budget.decide(now, priorityKey);
       emitReplayDiagnostic({
         type: 'capture_attempt',
         timestamp: now,
-        usedBytes: decision.usedBytes,
-        maxBytesPerMinute: this.imagePolicy.maxBytesPerMinute,
       });
-      if (!decision.allowed) {
-        emitReplayDiagnostic({
-          type: 'capture_skipped',
-          timestamp: now,
-          reason: decision.reason || 'budget',
-        });
-        return pointerSize ? this.writePendingPointers(context, pointerSize.width, pointerSize.height) : false;
-      }
 
-      const frame = await this.capture.capture(decision.maxImageDimension);
+      const frame = await this.capture.capture(this.imagePolicy.maxImageDimension);
       if (generation !== this.captureGeneration) return false;
       if (!frame) return false;
-      pointerSize = { width: frame.width, height: frame.height };
+      // Native encoding may shrink the resource to meet the per-image limit, but
+      // the replay canvas, image bounds and touch coordinates stay in one
+      // logical space based on the configured maximum size.
+      const displaySize = viewportSize
+        ? scaledReplayViewport(viewportSize, this.imagePolicy.maxImageDimension)
+        : this.lastDisplaySize
+          ? this.lastDisplaySize
+          : { width: frame.width, height: frame.height };
       applyPrivacyRegions(frame.rgba, frame.width, frame.height, frame.privacyRegions || []);
       const fingerprint = frameFingerprint(frame.rgba);
       const privacyKey = privacyRegionsKey(frame.privacyRegions || []);
@@ -262,26 +254,27 @@ export class FTSessionReplay {
           timestamp: now,
           reason: duplicate ? 'dedupe' : 'approx_static',
         });
-        return this.writePendingPointers(context, frame.width, frame.height);
+        return pointerSize ? this.writePendingPointers(context, pointerSize.width, pointerSize.height) : false;
       }
       stored = await this.capture.persist(frame, fingerprint);
       if (generation !== this.captureGeneration) return false;
-      const saved = await this.saveImage(stored, decision.compressionQuality, decision.maxFrameBytes);
+      const saved = await this.saveImage(stored, this.imagePolicy.compressionQuality, this.imagePolicy.maxFrameBytes);
       if (generation !== this.captureGeneration) return false;
       if (!saved) {
-        emitReplayDiagnostic({ type: 'capture_skipped', timestamp: now, reason: 'budget' });
-        return this.writePendingPointers(context, frame.width, frame.height);
+        emitReplayDiagnostic({ type: 'capture_skipped', timestamp: now, reason: 'image_rejected' });
+        return pointerSize ? this.writePendingPointers(context, pointerSize.width, pointerSize.height) : false;
       }
 
-      const pendingPointers = this.scaledPendingPointers(saved.width, saved.height);
+      const pendingPointers = this.scaledPendingPointers(displaySize.width, displaySize.height);
       const encoded = encodeReplayImageRecord({
         context,
         resourceId: saved.resourceId,
-        width: saved.width,
-        height: saved.height,
+        width: displaySize.width,
+        height: displaySize.height,
         ...(saved.mimeType ? { mimeType: saved.mimeType } : {}),
         timestamp: stored.timestamp,
         contextChanged,
+        viewportChanged,
         pointerEvents: pendingPointers,
       });
       this.transport.invoke('replay.writeSegment', {
@@ -298,7 +291,6 @@ export class FTSessionReplay {
       });
       this.updateRecordCount(context.viewId, encoded.recordCount);
       this.pendingPointerEvents.splice(0, pendingPointers.length);
-      this.budget.record(now, saved.byteSize, priorityKey);
       emitReplayDiagnostic({
         type: 'image_saved',
         timestamp: now,
@@ -306,7 +298,7 @@ export class FTSessionReplay {
         width: saved.width,
         height: saved.height,
         ...(saved.mimeType ? { mimeType: saved.mimeType } : {}),
-        priority: decision.priority,
+        priority: contextChanged || viewportChanged,
         byteSizeSource: saved.byteSizeSource,
       });
       this.lastFingerprint = fingerprint;
@@ -314,7 +306,7 @@ export class FTSessionReplay {
       this.lastPrivacyKey = privacyKey;
       this.lastFrameSample = sample;
       this.lastImageTimestamp = now;
-      this.lastImageSize = { width: saved.width, height: saved.height };
+      this.lastDisplaySize = displaySize;
       this.lastViewportSize = viewportSize;
       return true;
     } catch (error) {
@@ -346,9 +338,8 @@ export class FTSessionReplay {
     this.lastPrivacyKey = undefined;
     this.lastFrameSample = undefined;
     this.lastImageTimestamp = undefined;
-    this.lastImageSize = undefined;
+    this.lastDisplaySize = undefined;
     this.lastViewportSize = undefined;
-    this.budget.reset();
     this.recordCounts.clear();
     this.pendingPointerEvents = [];
     if (this.recordTouches && this.pointerSource) {
@@ -383,13 +374,19 @@ export class FTSessionReplay {
     if (!this.running) return;
     this.timer = setTimeout(async () => {
       if (!this.running || generation !== this.captureGeneration) return;
+      const startedAt = Date.now();
       try {
         await this.captureNow();
       } catch (error) {
         console.error('[cocos-sdk] Session Replay frame dropped:', error);
       } finally {
         if (this.running && generation === this.captureGeneration) {
-          this.schedule(1000 / this.config.captureFps, generation);
+          // Encoding and file cleanup are part of the frame interval. Keep one
+          // frame in flight and skip missed slots instead of accumulating work.
+          const interval = 1000 / this.config.captureFps;
+          const elapsed = Math.max(0, Date.now() - startedAt);
+          const slots = Math.max(1, Math.ceil(elapsed / interval));
+          this.schedule(Math.max(0, slots * interval - elapsed), generation);
         }
       }
     }, delay);
@@ -405,25 +402,34 @@ export class FTSessionReplay {
     compressionQuality: number,
     maxFrameBytes: number,
   ): Promise<FTReplaySavedImage | undefined> {
-    if (this.imagePolicyEnabled && this.supportsSaveImageV2 !== false) {
-      try {
-        const value = await this.invokeSaveImage('replay.saveImageV2', {
-          path: stored.path,
-          width: stored.width,
-          height: stored.height,
-          quality: compressionQuality,
-          maxFrameBytes,
-        }) as unknown;
-        if (value !== undefined) {
-          this.supportsSaveImageV2 = true;
-          if (isRejectedSaveImageV2(value)) return undefined;
-          return { ...normalizeSaveImageV2Result(value), byteSizeSource: 'native' };
+    if (this.imagePolicyEnabled) {
+      if (this.supportsSaveImageV2 !== false) {
+        try {
+          const value = await this.invokeSaveImage('replay.saveImageV2', {
+            path: stored.path,
+            width: stored.width,
+            height: stored.height,
+            quality: compressionQuality,
+            maxFrameBytes,
+          }) as unknown;
+          if (value !== undefined) {
+            this.supportsSaveImageV2 = true;
+            if (isRejectedSaveImageV2(value)) return undefined;
+            const result = normalizeSaveImageV2Result(value);
+            if (result.byteSize > maxFrameBytes) {
+              throw new RangeError('Native replay image exceeded imagePolicy.maxFrameBytes');
+            }
+            return { ...result, byteSizeSource: 'native' };
+          }
+          this.supportsSaveImageV2 = false;
+        } catch (error) {
+          if (!isUnknownBridgeMethod(error)) throw error;
+          this.supportsSaveImageV2 = false;
         }
-        this.supportsSaveImageV2 = false;
-      } catch (error) {
-        if (!isUnknownBridgeMethod(error)) throw error;
-        this.supportsSaveImageV2 = false;
       }
+      // V1 cannot enforce encoded size. Never silently discard a caller's
+      // explicit image policy by falling back to unbounded image storage.
+      throw new Error('Replay imagePolicy requires replay.saveImageV2. Upgrade the native Replay SDK and rebuild the native project.');
     }
 
     const resourceId = await this.invokeSaveImage('replay.saveImage', {
@@ -434,12 +440,10 @@ export class FTSessionReplay {
     if (!resourceId) return undefined;
     return {
       resourceId,
-      // V1 cannot report encoded size. A conservative frame-limit estimate
-      // still prevents configured captureFps from multiplying traffic freely.
-      byteSize: maxFrameBytes,
       width: stored.width,
       height: stored.height,
-      byteSizeSource: 'frame_limit_estimate',
+      // Legacy storage does not report actual bytes; do not invent traffic.
+      byteSizeSource: 'unavailable',
       ...(this.transport.platform === 'ios' ? { mimeType: 'image/png' as const } : {}),
     };
   }
@@ -486,6 +490,14 @@ export class FTSessionReplay {
     this.recordCounts.set(viewId, count);
     this.transport.invoke('replay.setRecordCount', { viewId, count });
   }
+}
+
+function scaledReplayViewport(size: { width: number; height: number }, maxDimension: number): { width: number; height: number } {
+  const scale = Math.min(1, maxDimension / Math.max(size.width, size.height));
+  return {
+    width: Math.max(1, Math.round(size.width * scale)),
+    height: Math.max(1, Math.round(size.height * scale)),
+  };
 }
 
 function normalizeRumContext(value: unknown): FTRUMContext | undefined {

@@ -74,7 +74,7 @@ describe('local replay motion', () => {
       disposeStoredFrame() {}, setPrivacy() {},
     };
     const replay = new FTSessionReplay(transport, capture);
-    replay.start({ imagePolicy: { adaptiveCapture: false } });
+    replay.start();
     try {
       await expect(replay.captureNow()).resolves.toBe(true);
       rgba[4] = 101;

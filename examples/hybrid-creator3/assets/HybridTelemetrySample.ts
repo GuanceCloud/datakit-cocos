@@ -108,6 +108,7 @@ class HybridTelemetryRuntime {
         replay: {
           captureFps: 2,
           maxImageDimension: 720,
+          imagePolicy: { quality: 'medium', maxFrameBytes: 40 * 1024 },
           touchPrivacy: 'show',
         },
         autoTrack: {

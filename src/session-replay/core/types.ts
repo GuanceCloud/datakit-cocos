@@ -9,16 +9,12 @@ export type FTReplayTouchPrivacy = 'show' | 'hide';
 /** Image quality preset used by Cocos Session Replay. */
 export type FTReplayQuality = 'low' | 'medium' | 'high';
 
-/** Image traffic controls for Cocos Session Replay. */
+/** Per-image encoding controls for Cocos Session Replay. */
 export interface FTReplayImagePolicy {
-  /** Compression, size, and traffic preset. @defaultValue `'medium'` */
+  /** Compression, dimension, and per-image size preset. @defaultValue `'medium'` */
   quality?: FTReplayQuality;
-  /** Maximum encoded bytes for a normal image resource. */
+  /** Maximum encoded bytes for every image, including the first frame of a view. Accepts 1024 to 1048576. Requires the native V2 image encoder. */
   maxFrameBytes?: number;
-  /** Maximum encoded image bytes retained in a rolling 60-second window. */
-  maxBytesPerMinute?: number;
-  /** Paces captures to the image budget and adapts quality and size as it fills. @defaultValue `true` */
-  adaptiveCapture?: boolean;
 }
 
 /** Session Replay configuration for standalone Cocos applications. */
@@ -31,7 +27,7 @@ export interface FTSessionReplayConfig {
   captureFps?: number;
   /** Maximum width or height of a captured frame. Accepts `1` to `2048`. @defaultValue `720` */
   maxImageDimension?: number;
-  /** Image compression and rolling traffic-budget controls. */
+  /** Enables per-image compression and size limits. Requires the native V2 image encoder; no rolling traffic limit is applied. */
   imagePolicy?: FTReplayImagePolicy;
   /** Whether captured replays include touch positions. @defaultValue `'hide'` */
   touchPrivacy?: FTReplayTouchPrivacy;
@@ -43,7 +39,7 @@ export interface FTHybridSessionReplayConfig {
   captureFps?: number;
   /** Maximum width or height of a captured frame. Accepts `1` to `2048`. @defaultValue `720` */
   maxImageDimension?: number;
-  /** Image compression and rolling traffic-budget controls. */
+  /** Enables per-image compression and size limits. Requires the native V2 image encoder; no rolling traffic limit is applied. */
   imagePolicy?: FTReplayImagePolicy;
   /** Whether captured replays include touch positions. @defaultValue `'hide'` */
   touchPrivacy?: FTReplayTouchPrivacy;

@@ -412,7 +412,7 @@ describe('session replay', () => {
     });
   });
 
-  it('probes an unsupported V2 bridge once and keeps using V1', async () => {
+  it('reports an unsupported V2 bridge without bypassing the explicit image limit', async () => {
     class LegacyTransport extends RecordingTransport {
       v2Attempts = 0;
 
@@ -434,13 +434,18 @@ describe('session replay', () => {
     const transport = new LegacyTransport();
     const replay = new FTSessionReplay(transport, new ChangingCapture());
 
-    replay.start({ imagePolicy: { adaptiveCapture: false } });
-    await expect(replay.captureNow()).resolves.toBe(true);
-    await expect(replay.captureNow()).resolves.toBe(true);
-    replay.stop();
-
-    expect(transport.v2Attempts).toBe(1);
-    expect(transport.calls.filter((call) => call.method === 'replay.saveImage')).toHaveLength(2);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      replay.start({ imagePolicy: { maxFrameBytes: 4096 } });
+      await expect(replay.captureNow()).resolves.toBe(false);
+      await expect(replay.captureNow()).resolves.toBe(false);
+      expect(error.mock.calls[0]?.[1]).toMatchObject({ message: expect.stringContaining('requires replay.saveImageV2') });
+      expect(transport.v2Attempts).toBe(1);
+      expect(transport.calls.filter((call) => call.method === 'replay.saveImage')).toHaveLength(0);
+    } finally {
+      replay.stop();
+      error.mockRestore();
+    }
   });
 
   it('drops one failed frame without disabling the next capture', async () => {
@@ -522,34 +527,34 @@ describe('session replay', () => {
     expect(pointers).toMatchObject({ starts: 1, stops: 1 });
   });
 
-  it('skips GPU capture when the rolling budget is full but still writes pointers', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1_000);
-    const transport = new RecordingTransport();
+  it('keeps writing pointers when the native encoder rejects a frame', async () => {
+    class RejectingTransport extends RecordingTransport {
+      images = 0;
+      override invoke<T>(method: string, payload?: unknown): T | undefined {
+        if (method === 'replay.saveImageV2') {
+          return (++this.images === 1
+            ? { resourceId: 'image', width: 2, height: 2, byteSize: 100 }
+            : { accepted: false }) as T;
+        }
+        return super.invoke<T>(method, payload);
+      }
+    }
+    const transport = new RejectingTransport();
     const capture = new StaticCapture();
     const pointers = new RecordingPointerSource();
     const replay = new FTSessionReplay(transport, capture, pointers);
     try {
-      replay.start({
-        touchPrivacy: 'show',
-        imagePolicy: { maxFrameBytes: 1024, maxBytesPerMinute: 16 * 1024 },
-      });
+      replay.start({ touchPrivacy: 'show', imagePolicy: { maxFrameBytes: 1024 } });
       await expect(replay.captureNow()).resolves.toBe(true);
-      pointers.emit({
-        eventType: 'move',
-        pointerId: 1,
-        normalizedX: 0.5,
-        normalizedY: 0.5,
-        timestamp: 1_100,
-      });
+      capture.rgba.fill(0);
+      pointers.emit({ eventType: 'move', pointerId: 1, normalizedX: 0.5, normalizedY: 0.5, timestamp: 1_100 });
       await expect(replay.captureNow()).resolves.toBe(true);
-
-      expect(capture.captures).toBe(1);
+      expect(capture.captures).toBe(2);
+      expect(transport.images).toBe(2);
       const segments = transport.calls.filter((call) => call.method === 'replay.writeSegment');
       expect(JSON.parse((segments[1]?.payload as { segment: string }).segment).records[0].type).toBe(11);
     } finally {
       replay.stop();
-      vi.useRealTimers();
     }
   });
 
