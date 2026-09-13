@@ -25,6 +25,8 @@ export interface FTCanvasCapture {
   capture(maxImageDimension: number): Promise<FTCapturedFrame | undefined>;
   persist(frame: FTCapturedFrame, fingerprint: string): Promise<FTStoredFrame>;
   disposeStoredFrame(frame: FTStoredFrame): void | Promise<void>;
+  /** Cancel pending GPU capture and release reusable capture resources. */
+  dispose?(): void;
   setPrivacy(node: unknown, mode: 'mask' | 'hide' | 'unmask'): void;
 }
 
@@ -367,6 +369,7 @@ export class FTSessionReplay {
     this.pendingPointerEvents = [];
     if (this.timer !== undefined) clearTimeout(this.timer);
     this.timer = undefined;
+    this.capture.dispose?.();
     if (wasRunning) emitReplayDiagnostic({ type: 'replay_stopped', timestamp: Date.now() });
   }
 
