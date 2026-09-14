@@ -40,7 +40,7 @@ If automatic scene tracking is disabled, pass a `viewName` to `enterCocos`. Use 
 
 ## Image size and traffic
 
-The per-image behavior below applies to development builds containing commit `ef1137b`; the device reference used locally packed `0.1.0-alpha.6` packages. The package version string alone does not identify this change in an older build.
+The per-image behavior below is included in `0.1.0-alpha.7`. The device reference used locally packed development `0.1.0-alpha.6` packages containing commit `ef1137b`; published `0.1.0-alpha.6` packages predate this change.
 
 Set the capture frequency and per-image limits independently:
 

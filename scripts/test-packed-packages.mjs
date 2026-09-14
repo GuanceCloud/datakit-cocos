@@ -79,7 +79,7 @@ try {
     mkdirSync(ccRoot, { recursive: true });
     writeFileSync(path.join(ccRoot, 'package.json'), JSON.stringify({ name: 'cc', type: 'module', exports: { '.': './index.js', './env': './env.js' } }));
     writeFileSync(path.join(ccRoot, 'env.js'), 'export const NATIVE = false;');
-    writeFileSync(path.join(ccRoot, 'index.js'), 'export const Camera={},Director={},EditBox={},RenderTexture={},UITransform={},Vec3={},director={},native={},sys={},view={},Input={},input={};');
+    writeFileSync(path.join(ccRoot, 'index.js'), 'export const Camera={},Director={},EditBox={},Node={},RenderTexture={},UITransform={},Vec3={},director={},isValid=()=>true,native={},sys={},view={},Input={},input={};');
     const sample = `
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';

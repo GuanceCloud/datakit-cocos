@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.1.0-alpha.7
+
+### Improvements
+
+- **Session Replay image limits and capture cadence**: Replace the rolling minute budget and adaptive throttling with explicit per-image limits. Apply `imagePolicy.maxFrameBytes` to every image, including new-view and rotation frames, and include processing time in the configured capture interval. Preserve display coordinates when captured images are resized.
+- **Integration samples and documentation**: Unify the Creator 2 and Creator 3 Hybrid samples around an interactive game, document public Replay and plugin APIs, and add measured Android Replay traffic references. Add Android 16 KB page-alignment settings and validation tooling to the Creator 3 sample.
+
+### Fixes
+
+- **Creator 3 Replay camera**: Isolate offscreen capture from the display camera so Replay does not alter the displayed scene or camera-dependent input coordinates.
+- **Creator 3 Replay touches**: Record touches consumed by UI controls while preserving normal engine input dispatch and avoiding duplicate Replay events.
+
+### Migration
+
+- Upgrade `@cloudcare/cocos-sdk` and `@cloudcare/cocos-session-replay` together to `0.1.0-alpha.7`. Projects using Replay must rerun `npx guance-cocos install --replay` and rebuild the native application.
+- Remove `imagePolicy.maxBytesPerMinute` and `imagePolicy.adaptiveCapture`. Configure `captureFps`, `maxImageDimension`, and `imagePolicy.maxFrameBytes` instead. Supplying `imagePolicy` enables the native V2 encoder and per-image byte limits; omitting it keeps legacy storage without an encoded-byte limit. Per-image limits do not impose a rolling traffic quota.
+
+## 0.1.0-alpha.6
+
+### Features
+
+- **Optional Session Replay package**: Split Replay into `@cloudcare/cocos-session-replay`, with Creator 2 and Creator 3 entry points, privacy components, and optional native bridges. The base `@cloudcare/cocos-sdk` package no longer includes Replay.
+- **Replay composition API**: Add `withSessionReplay(baseSdk)` and a public base plugin API. The composed SDK exposes Replay configuration, lifecycle operations, privacy controls, and camera selection.
+
+### Improvements
+
+- **Native installation and publishing**: Add explicit `--replay` / `--no-replay` installation, preserve SDK-managed asset identity during migration, and coordinate exact package versions with verification and resumable publication of both npm packages.
+
+### Migration
+
+- Install both packages at the exact same version, compose the SDK with `withSessionReplay` before `start` or `attach`, import Replay types from the Replay package, and call `setReplayCamera` on the composed SDK. Rerun installation with `--replay` and rebuild the native application.
+
 ## 0.1.0-alpha.5
 
 ### Features
