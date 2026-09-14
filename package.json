@@ -22,6 +22,7 @@
     "build:creator3": "tsc -p tsconfig.creator3.json",
     "clean": "node scripts/clean.mjs",
     "test": "vitest run",
+    "test:android-alignment": "python3 test/android-page-alignment.test.py",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.tests.json --noEmit",
     "sample:configure": "node scripts/configure-sample.mjs",
@@ -31,7 +32,8 @@
     "build:replay:creator3": "tsc -p tsconfig.replay-creator3.json",
     "test:publish-token": "node --test scripts/test-publish-npm-token.mjs",
     "test:packed": "node scripts/test-packed-packages.mjs",
-    "test:published": "node scripts/test-packed-packages.mjs --published"
+    "test:published": "node scripts/test-packed-packages.mjs --published",
+    "samples:sync": "node scripts/sync-sample-game.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

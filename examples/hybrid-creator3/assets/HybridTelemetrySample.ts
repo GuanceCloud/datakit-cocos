@@ -1,3 +1,4 @@
+import { StarportScene } from './StarportScene';
 import ReplayPrivacy, { ReplayPrivacyMode } from './guance-cocos-sdk/ReplayPrivacy';
 import { Replay3DScene } from './Replay3DScene';
 import {
@@ -71,6 +72,8 @@ interface UntrackedXhrMethods {
 }
 
 class HybridTelemetryRuntime {
+  private sampleRoot?: Node;
+  private gameNode?: Node;
   private status?: Label;
   private replayCard?: Graphics;
   private privacyMaskProbe?: Node;
@@ -91,6 +94,7 @@ class HybridTelemetryRuntime {
     this.sampleCamera = camera;
     this.sampleCanvas = root.parent!;
     guanceSdk.setReplayCamera(camera);
+    this.sampleRoot = root;
     this.render(root);
 
     if (!sys.isNative) {
@@ -149,7 +153,7 @@ class HybridTelemetryRuntime {
 
   private emitRumAndLog(): void {
     const attributes = { ...ATTRIBUTES, button: 'rum_log', emitted_at: Date.now() };
-    guanceSdk.rum.addAction('creator3_rum_log_clicked', 'click', attributes);
+    guanceSdk.rum.addAction('rum_log_clicked', 'click', attributes);
     guanceSdk.logger.log('Creator 3 sample emitted a RUM Action and linked Log', 'info', attributes);
     this.setStatus('RUM Action + linked Log emitted', COLORS.primary);
   }
@@ -195,7 +199,7 @@ class HybridTelemetryRuntime {
     };
 
     guanceSdk.rum.startResource(resourceKey, attributes);
-    guanceSdk.rum.addAction('creator3_trace_request_started', 'network', attributes);
+    guanceSdk.rum.addAction('trace_request_started', 'network', attributes);
     this.setStatus('Trace headers generated; request in progress…', COLORS.info);
 
     const request = new XMLHttpRequest();
@@ -241,7 +245,7 @@ class HybridTelemetryRuntime {
   private emitError(): void {
     const error = new Error('Creator 3 Hybrid sample diagnostic error');
     const attributes = { ...ATTRIBUTES, error_source: 'manual_button' };
-    guanceSdk.rum.addAction('creator3_error_clicked', 'click', attributes);
+    guanceSdk.rum.addAction('error_clicked', 'click', attributes);
     guanceSdk.rum.addError(error.message, error.stack || '', 'sample_error', 'run', attributes);
     guanceSdk.logger.log(error.message, 'error', attributes);
     this.setStatus('RUM Error + linked error Log emitted', COLORS.danger);
@@ -258,7 +262,7 @@ class HybridTelemetryRuntime {
       this.replayCard.fill();
     }
     const attributes = { ...ATTRIBUTES, replay_state: this.replayState };
-    guanceSdk.rum.addAction('creator3_replay_state_changed', 'click', attributes);
+    guanceSdk.rum.addAction('replay_state_changed', 'click', attributes);
     guanceSdk.logger.log(`Replay visual state changed to ${this.replayState}`, 'info', attributes);
     this.setStatus(`Replay visual state changed: ${this.replayState}`, color);
   }
@@ -267,7 +271,7 @@ class HybridTelemetryRuntime {
     this.maskShowAll = !this.maskShowAll;
     const scenario = this.maskShowAll ? 'show_all' : 'fixed_height';
     view.setDesignResolutionSize(960, 640, this.maskShowAll ? ResolutionPolicy.SHOW_ALL : ResolutionPolicy.FIXED_HEIGHT);
-    guanceSdk.rum.addAction('creator3_mask_fit_changed', 'click', { ...ATTRIBUTES, mask_scenario: scenario });
+    guanceSdk.rum.addAction('mask_fit_changed', 'click', { ...ATTRIBUTES, mask_scenario: scenario });
     this.setStatus(`Mask verification: ${scenario} · private token must stay gray in Replay`, COLORS.primary);
   }
 
@@ -408,7 +412,8 @@ class HybridTelemetryRuntime {
 
     const statusPanel = this.panel(root, 'StatusPanel', 0, -180, 780, 84, COLORS.panel);
     this.status = this.label(statusPanel, 'Preparing Hybrid integration…', 0, 0, 730, 50, 18, COLORS.muted);
-    this.button(root, 'Replay3D', 'Open 3D Replay scene', 0, -258, 360, 40, () => this.open3DScene(), COLORS.info);
+    this.button(root, 'StarportGame', 'Open Starport Game', -200, -258, 360, 40, () => this.openGame(), COLORS.primary);
+    this.button(root, 'Replay3D', 'Extra: 3D Replay scene', 200, -258, 360, 40, () => this.open3DScene(), COLORS.info);
   }
 
   private async open3DScene(): Promise<void> {
@@ -437,6 +442,53 @@ class HybridTelemetryRuntime {
       this.setStatus(`Unable to load 3D scene: ${String(error)}`, COLORS.danger);
       console.error('[HybridTelemetrySample] Unable to load 3D scene', error);
     }
+  }
+
+  private openGame(): void {
+    if (this.gameNode || !this.sampleRoot) return;
+    const sampleRoot = this.sampleRoot;
+    // The shared game uses the same screen camera, so HUD and gameplay are captured together.
+    view.setDesignResolutionSize(960, 640, ResolutionPolicy.SHOW_ALL);
+    sampleRoot.active = false;
+    if (this.privacyMaskProbe) guanceSdk.replay.setPrivacy(this.privacyMaskProbe, 'unmask');
+    const node = new Node('StarportGame');
+    node.layer = Layers.Enum.UI_2D;
+    sampleRoot.parent!.addChild(node);
+    this.gameNode = node;
+    const restore = (): void => {
+      if (this.gameNode !== node) return;
+      this.gameNode = undefined;
+      node.active = false;
+      node.destroy();
+      // Rebuild procedural Graphics after returning; native 3.x can lose their
+      // uploaded geometry when the old UI subtree is disabled and re-enabled.
+      sampleRoot.children.slice().forEach(child => { child.active = false; child.destroy(); });
+      this.privacyLayoutMoved = false;
+      this.replayState = 0;
+      sampleRoot.active = true;
+      this.render(sampleRoot);
+      this.setStatus(this.entered ? 'Cocos page active · automatic and manual network samples ready' : 'Editor preview only. Build Android or iOS to call the native bridge.', this.entered ? COLORS.primary : COLORS.warning);
+      view.setDesignResolutionSize(960, 640, this.maskShowAll ? ResolutionPolicy.SHOW_ALL : ResolutionPolicy.FIXED_HEIGHT);
+      guanceSdk.setReplayCamera(this.sampleCamera);
+      if (this.privacyMaskProbe) guanceSdk.replay.setPrivacy(this.privacyMaskProbe, 'mask');
+      if (this.entered) { guanceSdk.rum.stopView(); guanceSdk.rum.startView(VIEW_NAME, ATTRIBUTES); }
+    };
+    try {
+      node.addComponent(StarportScene).initialize({
+        exit: restore,
+        page: name => {
+          if (!this.entered) return;
+          guanceSdk.rum.stopView();
+          guanceSdk.rum.startView(`Starport/${name}`, { ...ATTRIBUTES, game: 'starport' });
+        },
+        track: (action, attributes) => {
+          if (!this.entered) return;
+          const fields = { ...ATTRIBUTES, ...attributes };
+          guanceSdk.rum.addAction(action, 'custom', fields);
+          guanceSdk.logger.log(`starport ${action}`, 'info', fields);
+        },
+      }, this.sampleCamera!);
+    } catch (error) { restore(); this.setStatus(`Unable to open game: ${String(error)}`, COLORS.danger); }
   }
 
   private panel(parent: Node, name: string, x: number, y: number, width: number, height: number, color: Color, square = false): Node {

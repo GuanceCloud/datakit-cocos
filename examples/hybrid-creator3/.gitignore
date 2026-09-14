@@ -19,3 +19,12 @@
 
 # Installed by npm run sdk:install; preserve generated .meta files on reinstall.
 /assets/guance-cocos-sdk/
+
+# Generated from the common acceptance game by npm run game:sync.
+/assets/acceptance-game/
+/assets/acceptance-game.meta
+/assets/resources/starport-sfx/
+/assets/resources/starport-sfx.meta
+
+/assets/guance-cocos-sdk.meta
+/cocos-sdk.config.json

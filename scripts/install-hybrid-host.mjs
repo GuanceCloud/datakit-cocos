@@ -84,6 +84,9 @@ const iosProjectCount = useSPM ? spmProjects.length : podfiles.length;
 const iosLaunchFiles = files.filter((file) => ['AppDelegate.mm', 'AppController.mm'].includes(path.basename(file)));
 
 gradleFiles.forEach((file) => patchGradle(file, path.join(nativeHostBuild, 'android')));
+if (creator === '3') {
+  gradleFiles.forEach((file) => patchAndroidPageAlignment(path.resolve(path.dirname(file), '../CMakeLists.txt')));
+}
 appActivities.forEach(patchAndroidLaunch);
 rootGradleFiles.forEach(patchFTPluginClasspath);
 androidManifests.forEach((file) => patchAndroidManifest(file, creator));
@@ -160,6 +163,22 @@ function patchGradle(file, androidHostRoot) {
   replaceMarkedBlock(file, ANDROID_BEGIN, ANDROID_END, block.join('\n'));
 }
 
+function patchAndroidPageAlignment(file) {
+  if (!existsSync(file) || !/add_library\(\s*\$\{CC_LIB_NAME\}\s+SHARED\b/.test(readFileSync(file, 'utf8'))) {
+    fail(`Unable to locate the Creator 3 shared library target in ${file}`);
+  }
+  const begin = '# COCOS_HYBRID_ANDROID_PAGE_ALIGNMENT_BEGIN';
+  const end = '# COCOS_HYBRID_ANDROID_PAGE_ALIGNMENT_END';
+  replaceMarkedBlock(file, begin, end, [
+    begin,
+    '# Older NDKs need both options for 16 KB LOAD segments and GNU_RELRO boundaries.',
+    '# Scope this to libcocos; prebuilt shared libraries must be checked separately.',
+    'set_property(TARGET ${CC_LIB_NAME} APPEND_STRING PROPERTY LINK_FLAGS',
+    '    " -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384")',
+    end,
+  ].join('\n'));
+}
+
 function patchFTPluginClasspath(file) {
   const source = readFileSync(file, 'utf8');
   const block = [
@@ -191,18 +210,20 @@ function patchAndroidManifest(file, creatorVersion) {
   const activityName = `android:name="${cocosActivity}"`;
   const activityNameIndex = source.indexOf(activityName);
   const activityStart = activityNameIndex >= 0 ? source.lastIndexOf('<activity', activityNameIndex) : -1;
-  const activityEndStart = activityNameIndex >= 0 ? source.indexOf('</activity>', activityNameIndex) : -1;
-  if (activityStart < 0 || activityEndStart < 0) {
+  const openingTagEnd = activityStart >= 0 ? source.indexOf('>', activityStart) : -1;
+  const selfClosing = openingTagEnd >= 0 && source[openingTagEnd - 1] === '/';
+  const activityEndStart = selfClosing ? openingTagEnd : source.indexOf('</activity>', openingTagEnd);
+  if (activityStart < 0 || openingTagEnd < 0 || activityEndStart < 0) {
     fail(`Unable to locate ${cocosActivity} in ${file}`);
   }
-  const activityEnd = activityEndStart + '</activity>'.length;
+  const activityEnd = selfClosing ? openingTagEnd + 1 : activityEndStart + '</activity>'.length;
   let appActivity = source.slice(activityStart, activityEnd);
   if (creatorVersion === '2') {
     const openingTag = appActivity.match(/<activity\b[^>]*>/)?.[0];
     if (!openingTag) fail(`Unable to locate ${cocosActivity} activity tag in ${file}`);
     const withCocosProcess = /\bandroid:process\s*=/.test(openingTag)
       ? openingTag.replace(/\bandroid:process\s*=\s*"[^"]*"/, 'android:process=":cocos"')
-      : openingTag.replace(/>$/, ' android:process=":cocos">');
+      : openingTag.replace(/(\/?>)$/, ' android:process=":cocos"$1');
     appActivity = appActivity.replace(openingTag, withCocosProcess);
   }
   const withoutLauncher = appActivity.replace(/\s*<intent-filter>[\s\S]*?<\/intent-filter>/g, (filter) => (
