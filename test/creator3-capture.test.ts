@@ -196,14 +196,15 @@ describe('Creator 3 isolated replay capture', () => {
     const second = (await take(capture))!;
     expect(state.cameras).toHaveLength(2);
     expect(state.textures).toHaveLength(1);
-    expect(second.rgba).not.toBe(first.rgba);
+    // Compare references directly; Vitest's negated toBe deeply compares large arrays.
+    expect(second.rgba === first.rgba).toBe(false);
     const oldCamera = state.cameras[1];
     const oldTexture = state.textures[0];
     state.visible = { width: 1080, height: 1920 };
     const resized = (await take(capture))!;
     expect(resized.width).toBe(405);
     expect(resized.height).toBe(720);
-    expect(resized.rgba).not.toBe(first.rgba);
+    expect(resized.rgba === first.rgba).toBe(false);
     expect(oldCamera.enabled).toBe(false);
     expect(oldCamera.node.isValid).toBe(false);
     expect(oldTexture.destroyed).toBe(true);
