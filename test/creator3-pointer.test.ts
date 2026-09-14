@@ -1,80 +1,81 @@
 /// <reference path="../src/creator3/shims.d.ts" />
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FTCreator3PointerSource } from '../src/session-replay/creator3/pointer';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FTReplayPointerEvent } from '../src/session-replay/core/replay';
 
-const engine = vi.hoisted(() => {
-  class Events {
-    readonly handlers = new Map<string, Set<(event: any) => void>>();
-    on(type: string, handler: (event: any) => void): void {
-      if (!this.handlers.has(type)) this.handlers.set(type, new Set());
-      this.handlers.get(type)!.add(handler);
-    }
-    off(type: string, handler: (event: any) => void): void { this.handlers.get(type)?.delete(handler); }
-    emit(type: string, event?: any): void { this.handlers.get(type)?.forEach((handler) => handler(event)); }
-    get count(): number { return [...this.handlers.values()].reduce((count, set) => count + set.size, 0); }
-  }
-  class Scene extends Events {
-    readonly captures = new Events();
-    override on(type: string, handler: (event: any) => void, _target?: any, capture?: boolean): void {
-      if (capture) this.captures.on(type, handler);
-      else super.on(type, handler);
-    }
-    override off(type: string, handler: (event: any) => void, _target?: any, capture?: boolean): void {
-      if (capture) this.captures.off(type, handler);
-      else super.off(type, handler);
-    }
-  }
-  return { Events, Scene, scene: new Scene(), input: new Events(), director: new Events() };
-});
-
+const engine = vi.hoisted(() => ({
+  dispatchers: [] as Array<{ priority: number; dispatchEvent(event: any): boolean; onThrowException(): void }>,
+  global: new Map<string, Set<(event: any) => void>>(),
+  sceneRegistered: false,
+  ui: [] as string[],
+  input: {} as any,
+}));
 vi.mock('cc', () => {
   const EventType = { TOUCH_START: 'down', TOUCH_MOVE: 'move', TOUCH_END: 'up', TOUCH_CANCEL: 'cancel' };
   return {
     Input: { EventType }, Node: { EventType }, input: engine.input,
     Director: { EVENT_AFTER_SCENE_LAUNCH: 'scene-launch' },
-    director: {
-      getScene: () => engine.scene,
-      on: engine.director.on.bind(engine.director),
-      off: engine.director.off.bind(engine.director),
-    },
+    director: { on() {}, off() {}, getScene: () => ({
+      // Scene.on registers a pointer processor even with useCapture=true.
+      // Scene has _uiProps but no UITransform: Creator 3.8.8 sorting then fails.
+      on() { engine.sceneRegistered = true; }, off() { engine.sceneRegistered = false; },
+    }) },
     view: { getVisibleSize: () => ({ width: 200, height: 100 }), getVisibleOrigin: () => ({ x: 10, y: 20 }) },
   };
 });
 
-afterEach(() => {
-  engine.scene = new engine.Scene();
-  engine.input.handlers.clear();
-  engine.director.handlers.clear();
-  vi.useRealTimers();
+let Source: typeof import('../src/session-replay/creator3/pointer').FTCreator3PointerSource;
+beforeEach(async () => {
+  engine.sceneRegistered = false;
+  engine.ui = [];
+  engine.global.clear();
+  engine.dispatchers = [
+    { priority: 1, onThrowException() {}, dispatchEvent(event) {
+      if (engine.sceneRegistered) throw new TypeError("Cannot read properties of null (reading 'cameraPriority')");
+      if (!event.uiHit) return true;
+      engine.ui.push(event.type);
+      event.propagationStopped = true;
+      return false;
+    } },
+    { priority: 0, onThrowException() {}, dispatchEvent(event) {
+      engine.global.get(event.type)?.forEach((callback) => callback(event)); return true;
+    } },
+  ];
+  Object.assign(engine.input, {
+    _registerEventDispatcher(dispatcher: typeof engine.dispatchers[number]) {
+      engine.dispatchers.push(dispatcher);
+      engine.dispatchers.sort((a, b) => b.priority - a.priority);
+    },
+    on(type: string, callback: (event: any) => void) {
+      if (!engine.global.has(type)) engine.global.set(type, new Set());
+      engine.global.get(type)!.add(callback);
+    },
+    off(type: string, callback: (event: any) => void) { engine.global.get(type)?.delete(callback); },
+  });
+  vi.resetModules();
+  Source = (await import('../src/session-replay/creator3/pointer')).FTCreator3PointerSource;
 });
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
-function touch(id = 1, x = 60, y = 45) {
-  return { getID: () => id, getUILocation: () => ({ x, y }), propagationStopped: false, preventSwallow: false };
+function touch(type: string, uiHit = true, id = 1, x = 60, y = 45) {
+  return { type, uiHit, getID: () => id, getUILocation: () => ({ x, y }), propagationStopped: false, preventSwallow: false };
 }
-
-// Match Creator 3.8's UI-before-GLOBAL dispatch: a claimed UI touch does not
-// reach input.on, even when its target permits propagation to other UI nodes.
-function dispatch(type: string, event: ReturnType<typeof touch>, uiTarget: boolean): void {
-  if (uiTarget) {
-    engine.scene.captures.emit(type, event);
-    event.propagationStopped = true; // Button / BlockInputEvents target handler.
-    return;
+function dispatch(event: ReturnType<typeof touch>): void {
+  for (const dispatcher of engine.dispatchers) {
+    if (!dispatcher.dispatchEvent(event)) break;
   }
-  engine.input.emit(type, event);
 }
 
-describe('Creator 3 replay pointer dispatch', () => {
-  it('records a UI button press before the target swallows it, with the input timestamp and coordinates', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1234);
+describe('Creator 3 replay does not alter business input dispatch', () => {
+  it('records UI down/up without registering the non-UI Scene or blocking the button', () => {
+    vi.useFakeTimers(); vi.setSystemTime(1234);
     const records: FTReplayPointerEvent[] = [];
-    const stop = new FTCreator3PointerSource().onReplayPointer((event) => records.push(event));
-    const down = touch();
-    dispatch('down', down, true);
-    vi.setSystemTime(1250);
-    dispatch('up', touch(), true);
+    const stop = new Source().onReplayPointer((event) => records.push(event));
+    const down = touch('down');
+    expect(() => dispatch(down)).not.toThrow();
+    vi.setSystemTime(1250); dispatch(touch('up'));
+    expect(engine.ui).toEqual(['down', 'up']);
+    expect(engine.sceneRegistered).toBe(false);
     expect(records).toEqual([
       { eventType: 'down', pointerId: 1, normalizedX: .25, normalizedY: .75, timestamp: 1234 },
       { eventType: 'up', pointerId: 1, normalizedX: .25, normalizedY: .75, timestamp: 1250 },
@@ -83,56 +84,72 @@ describe('Creator 3 replay pointer dispatch', () => {
     stop();
   });
 
-  it('records joystick motion and cancellation as well as touches outside UI', () => {
+  it('preserves joystick moves/cancellation and global input outside UI without duplicates', () => {
     const records: FTReplayPointerEvent[] = [];
-    const stop = new FTCreator3PointerSource().onReplayPointer((event) => records.push(event));
-    dispatch('down', touch(1), true);
-    dispatch('move', touch(1, 110, 70), true);
-    dispatch('down', touch(2), false);
-    dispatch('cancel', touch(1, 110, 70), true);
-    dispatch('up', touch(2), false);
+    const global = vi.fn(); engine.input.on('up', global);
+    const stop = new Source().onReplayPointer((event) => records.push(event));
+    dispatch(touch('down')); dispatch(touch('move', true, 1, 110, 70));
+    dispatch(touch('down', false, 2)); dispatch(touch('cancel'));
+    const outside = touch('up', false, 2); dispatch(outside);
     expect(records.map((event) => [event.eventType, event.pointerId])).toEqual([
       ['down', 1], ['move', 1], ['down', 2], ['up', 1], ['up', 2],
     ]);
-    expect(records[1]).toMatchObject({ normalizedX: .5, normalizedY: .5 });
+    expect(engine.ui).toEqual(['down', 'move', 'cancel']);
+    expect(global).toHaveBeenCalledExactlyOnceWith(outside);
+    expect(outside).toMatchObject({ propagationStopped: false, preventSwallow: false });
     stop();
   });
 
-  it('deduplicates UI/global delivery without dropping other fingers in the same EventTouch', async () => {
+  it('records every finger when the engine reuses EventTouch, and ignores non-touch events', () => {
     const records: FTReplayPointerEvent[] = [];
-    const stop = new FTCreator3PointerSource().onReplayPointer((event) => records.push(event));
+    const stop = new Source().onReplayPointer((event) => records.push(event));
     let id = 1;
-    const event = { ...touch(), getID: () => id };
-    engine.scene.captures.emit('down', event);
-    engine.scene.captures.emit('down', event);
-    engine.input.emit('down', event);
-    id = 2;
-    engine.scene.captures.emit('down', event);
-    engine.input.emit('down', event);
-    expect(records.map((record) => record.pointerId)).toEqual([1, 2]);
-    expect(event).toMatchObject({ propagationStopped: false, preventSwallow: false });
-    await Promise.resolve();
-    engine.input.emit('down', event); // A later dispatch may reuse the object.
-    expect(records).toHaveLength(3);
+    const event = { ...touch('down'), getID: () => id };
+    dispatch(event); id = 2; dispatch(event);
+    event.type = 'move'; dispatch(event); dispatch(event);
+    dispatch(touch('key-down', false));
+    expect(records.map((record) => [record.eventType, record.pointerId])).toEqual([
+      ['down', 1], ['down', 2], ['move', 2], ['move', 2],
+    ]);
     stop();
   });
 
-  it('rebinds on scene launch and removes both input paths on stop', () => {
-    const records: FTReplayPointerEvent[] = [];
-    const stop = new FTCreator3PointerSource().onReplayPointer((event) => records.push(event));
-    const first = engine.scene;
-    engine.scene = new engine.Scene();
-    engine.director.emit('scene-launch');
-    expect(first.captures.count).toBe(0);
-    first.captures.emit('down', touch());
-    dispatch('down', touch(), true);
-    expect(records).toHaveLength(1);
+  it('does not let replay exceptions stop UI or global listeners', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const stop = new Source().onReplayPointer(() => { throw new Error('recorder failed'); });
+    const global = vi.fn(); engine.input.on('up', global);
+    expect(() => dispatch(touch('down'))).not.toThrow();
+    expect(() => dispatch(touch('up', false))).not.toThrow();
+    expect(engine.ui).toEqual(['down']); expect(global).toHaveBeenCalledOnce();
     stop();
-    expect(engine.scene.captures.count).toBe(0);
-    expect(engine.director.count).toBe(0);
-    expect(engine.input.count).toBe(0);
-    dispatch('up', touch(), true);
-    dispatch('up', touch(), false);
-    expect(records).toHaveLength(1);
+  });
+
+  it('reuses one passive dispatcher and releases recording callbacks on stop', () => {
+    const first = vi.fn(), second = vi.fn();
+    const source = new Source();
+    const stopFirst = source.onReplayPointer(first);
+    const stopSecond = new Source().onReplayPointer(second);
+    expect(engine.dispatchers).toHaveLength(3);
+    dispatch(touch('down')); stopFirst(); dispatch(touch('move'));
+    expect(first).toHaveBeenCalledOnce(); expect(second).toHaveBeenCalledTimes(2);
+    stopSecond(); dispatch(touch('up'));
+    expect(second).toHaveBeenCalledTimes(2);
+    const stopAgain = source.onReplayPointer(first);
+    expect(engine.dispatchers).toHaveLength(3);
+    dispatch(touch('down')); expect(first).toHaveBeenCalledTimes(2);
+    stopAgain();
+    expect(engine.ui).toEqual(['down', 'move', 'up', 'down']);
+  });
+
+  it('keeps business input working when the internal dispatcher hook is unavailable', () => {
+    delete engine.input._registerEventDispatcher;
+    const records: FTReplayPointerEvent[] = [];
+    const stop = new Source().onReplayPointer((event) => records.push(event));
+    dispatch(touch('down')); dispatch(touch('up'));
+    expect(engine.ui).toEqual(['down', 'up']);
+    dispatch(touch('down', false)); dispatch(touch('move', false)); dispatch(touch('up', false));
+    expect(records.map((event) => event.eventType)).toEqual(['down', 'move', 'up']);
+    stop(); dispatch(touch('down', false)); expect(records).toHaveLength(3);
+    expect(engine.sceneRegistered).toBe(false);
   });
 });
