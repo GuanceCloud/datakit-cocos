@@ -10,8 +10,10 @@ import type { FTReplayDiagnosticEvent } from '../src/session-replay/core/replay-
 
 const inputState = vi.hoisted(() => ({ handlers: new Map<string, Set<(event: unknown) => void>>() }));
 vi.mock('cc', () => ({
-  Director: {}, director: {},
-  Input: { EventType: { TOUCH_START: 'down', TOUCH_END: 'up', TOUCH_CANCEL: 'cancel' } },
+  Director: { EVENT_AFTER_SCENE_LAUNCH: 'scene-launch' },
+  director: { getScene: () => undefined, on() {}, off() {} },
+  Node: { EventType: { TOUCH_START: 'down', TOUCH_MOVE: 'move', TOUCH_END: 'up', TOUCH_CANCEL: 'cancel' } },
+  Input: { EventType: { TOUCH_START: 'down', TOUCH_MOVE: 'move', TOUCH_END: 'up', TOUCH_CANCEL: 'cancel' } },
   input: {
     on(type: string, handler: (event: unknown) => void) {
       if (!inputState.handlers.has(type)) inputState.handlers.set(type, new Set());
