@@ -14,12 +14,44 @@ export interface FTAutoTrackingController {
 }
 
 export interface FTSDKLifecycle {
+  /**
+   * Validates or prepares the extension before standalone native SDK initialization.
+   * Throwing aborts startup before the base SDK is initialized.
+   */
   beforeStart?(): void;
+  /**
+   * Starts the extension after the base SDK and configured modules initialize,
+   * but before Cocos automatic tracking starts. If this hook throws, the native
+   * SDK remains initialized; startup is not automatically rolled back.
+   */
   afterStart?(): void;
+  /**
+   * Prepares the extension before the native Hybrid attachment call.
+   * The native host already owns SDK initialization at this point.
+   */
   beforeAttach?(): void;
+  /**
+   * Undoes extension preparation if beforeAttach or the native attachment call
+   * fails. Must tolerate partial preparation; errors from this hook are ignored
+   * so the original attachment error can be rethrown.
+   */
   rollbackAttach?(): void;
+  /**
+   * Starts extension activity when entering Cocos in Hybrid mode, before Cocos
+   * automatic tracking starts. A failure triggers the leave hook for cleanup.
+   */
   enter?(): void;
+  /**
+   * Stops extension activity when leaving Cocos in Hybrid mode, after automatic
+   * tracking cleanup is attempted. Also runs if entering Cocos fails, so it must
+   * tolerate partial startup. The native host SDK must remain running.
+   */
   leave?(): void;
+  /**
+   * Releases standalone extension resources after automatic tracking cleanup is
+   * attempted and before the base native SDK shuts down. Base SDK shutdown is
+   * still attempted if this hook throws. Not called for Hybrid applications.
+   */
   shutdown?(): void;
 }
 

@@ -25,21 +25,81 @@ export class FTCocosReplaySDK {
     this.trace = base.trace;
   }
 
+  /**
+   * Initializes the base SDK and configured modules for a standalone Cocos app.
+   * Supplying `config.replay` also enables native Session Replay and starts
+   * canvas capture. Omitting it does not start Replay.
+   *
+   * Call once during application startup, after composing with withSessionReplay.
+   * Do not combine with {@link attach}, which requires a native host-owned SDK.
+   *
+   * @param config - Base SDK settings, optional modules, and Replay settings.
+   * @throws If the SDK is already started or attached, Replay settings are
+   * invalid, or the required native Replay integration is unavailable.
+   */
   start(config: FTCocosReplayConfig): void {
     const { replay, ...base } = config;
     this.configure(replay);
     try { this.base.start(base); } finally { this.configure(undefined); }
   }
 
+  /**
+   * Attaches Cocos tracking to an SDK initialized by the native Hybrid host.
+   * Supplying `config.replay` prepares canvas capture for {@link enterCocos};
+   * capture does not start until that method is called. The native host owns
+   * native SDK and Replay initialization, including sampling settings.
+   *
+   * Call before the first {@link enterCocos}. Repeated calls after attachment
+   * have no effect and do not update the configuration.
+   *
+   * @param config - Optional Cocos automatic tracking and Hybrid Replay settings.
+   * @throws If standalone initialization has already started, Replay settings
+   * are invalid, or the required native Replay integration is unavailable.
+   */
   attach(config: FTCocosHybridReplayConfig = {}): void {
     const { replay, ...base } = config;
     this.configure(replay);
     try { this.base.attach(base); } finally { this.configure(undefined); }
   }
 
+  /**
+   * Selects the Cocos camera used for subsequent Session Replay captures.
+   * Update it when changing scenes if the selected camera belongs to the old
+   * scene. Selecting a camera does not start Replay capture.
+   *
+   * @param camera - A Camera component from the matching Creator engine in the
+   * active scene, or null/undefined to restore automatic camera selection.
+   */
   setReplayCamera(camera: unknown): void { this.capture.setCamera(camera); }
+
+  /**
+   * Starts Cocos automatic tracking and any Replay capture enabled by
+   * {@link attach} in Hybrid mode. Repeated calls while entered have no effect.
+   *
+   * @param options - Options for the Cocos view being entered. Supply `viewName`
+   * when automatic scene tracking is disabled.
+   * @throws If the SDK is not attached in Hybrid mode, the required view name
+   * is missing, or tracking or Replay startup fails.
+   */
   enterCocos(options?: FTCocosEnterOptions): void { this.base.enterCocos(options); }
+
+  /**
+   * Stops Cocos automatic tracking and Hybrid Replay capture while keeping the
+   * native host SDK running. Call {@link enterCocos} to resume Cocos tracking.
+   * Has no effect before attachment or when Cocos has already been left.
+   *
+   * @throws If the SDK was started in standalone mode, or tracking or Replay
+   * cleanup fails.
+   */
   leaveCocos(): void { this.base.leaveCocos(); }
+
+  /**
+   * Stops standalone Cocos tracking, Session Replay, and the base native SDK.
+   * Has no effect if the base SDK is idle. Hybrid applications must use
+   * {@link leaveCocos} because the native host owns SDK shutdown.
+   *
+   * @throws If the SDK is attached in Hybrid mode or shutdown cleanup fails.
+   */
   shutdown(): void { this.base.shutdown(); }
 }
 
