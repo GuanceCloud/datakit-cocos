@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
-import { planRelease, publishInOrder, validateManifests, validatePackedPackage, getRegistryDocument, verifyPublishedPackage } from './publish-npm-token.mjs';
+import { mkdtemp, mkdir, readFile, writeFile, copyFile, realpath, rm } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { planRelease, publishInOrder, validateManifests, validatePackedPackage, getRegistryDocument } from './publish-npm-token.mjs';
 
 const baseName = '@cloudcare/cocos-sdk';
 const replayName = '@cloudcare/cocos-session-replay';
@@ -63,24 +67,30 @@ test('a new publication cannot move an existing prerelease channel backwards', (
   assert.throws(() => planRelease(artifacts(), [base, null]), /refusing to move alpha/);
 });
 
-test('base must be published and verified before Replay, including partial retries', async () => {
+test('base publish completes before Replay, including partial retries', async () => {
   const events = [];
   const packed = artifacts();
-  await publishInOrder(packed, async item => events.push(`publish ${item.name}`), async item => events.push(`verify ${item.name}`));
-  assert.deepEqual(events, [`publish ${baseName}`, `verify ${baseName}`, `publish ${replayName}`, `verify ${replayName}`]);
+  await publishInOrder(packed, async item => {
+    events.push(`start ${item.name}`);
+    await Promise.resolve();
+    events.push(`done ${item.name}`);
+  });
+  assert.deepEqual(events, [`start ${baseName}`, `done ${baseName}`, `start ${replayName}`, `done ${replayName}`]);
   events.length = 0;
-  await publishInOrder([{ ...packed[0], skip: true }, packed[1]], async item => events.push(`publish ${item.name}`), async item => events.push(`verify ${item.name}`));
-  assert.deepEqual(events, [`verify ${baseName}`, `publish ${replayName}`, `verify ${replayName}`]);
+  const plans = planRelease(packed, [document(packed[0]), null]);
+  await publishInOrder(plans, async item => events.push(`publish ${item.name}`));
+  assert.deepEqual(events, [`publish ${replayName}`]);
+  await publishInOrder(packed.map(item => ({ ...item, skip: true })), async () => assert.fail('Already published'));
 });
 
-test('base failure or failed verification stops before Replay publication', async () => {
-  for (const failPublish of [true, false]) {
+test('publish command failure is propagated and stops the remaining packages', async () => {
+  for (const failingPackage of [baseName, replayName]) {
     const published = [];
     await assert.rejects(publishInOrder(artifacts(), async item => {
       published.push(item.name);
-      if (failPublish) throw new Error('publish failed');
-    }, async () => { throw new Error('verification failed'); }), /failed/);
-    assert.deepEqual(published, [baseName]);
+      if (item.name === failingPackage) throw new Error('publish failed');
+    }), /publish failed/);
+    assert.deepEqual(published, failingPackage === baseName ? [baseName] : [baseName, replayName]);
   }
 });
 
@@ -113,68 +123,84 @@ test('registry reads bypass shared CDN cache on every request', async () => {
   assert.notEqual(urls[0].search, urls[1].search);
 });
 
-function publication() {
-  const bytes = Buffer.from('inspected release tarball');
-  const plan = { ...artifacts()[0], tag: 'latest',
-    integrity: `sha512-${createHash('sha512').update(bytes).digest('base64')}` };
-  const published = document(plan);
-  published.versions[version].dist.tarball = 'https://registry.npmjs.org/@cloudcare/cocos-sdk/-/cocos-sdk-0.1.0-alpha.6.tgz';
-  return { bytes, plan, published };
-}
-
-test('verification waits for version, integrity and tag propagation before downloading', async () => {
-  const { bytes, plan, published } = publication();
-  const missingIntegrity = structuredClone(published);
-  delete missingIntegrity.versions[version].dist.integrity;
-  const staleTag = structuredClone(published);
-  staleTag['dist-tags'].latest = '0.1.0-alpha.5';
-  const snapshots = [null, missingIntegrity, staleTag, published];
-  let waits = 0;
-  let downloads = 0;
-  await verifyPublishedPackage(plan, {
-    getDocument: async () => snapshots.shift(),
-    wait: async () => { waits++; },
-    download: async () => { downloads++; return bytes; },
-  });
-  assert.equal(waits, 3);
-  assert.equal(downloads, 1);
-  assert.equal(snapshots.length, 0);
-});
-
-test('verification timeout distinguishes unavailable metadata from an integrity conflict', async () => {
-  const { plan, published } = publication();
-  published.versions[version].dist.integrity = 'sha512-different';
-  for (const [snapshot, reason] of [[null, /not exposed the published version/], [published, /integrity metadata/]]) {
-    let reads = 0;
-    let waits = 0;
-    await assert.rejects(verifyPublishedPackage(plan, {
-      attempts: 3, getDocument: async () => { reads++; return snapshot; },
-      wait: async () => { waits++; },
-      download: async () => { assert.fail('Unverified metadata must not proceed to download'); },
-    }), reason);
-    assert.equal(reads, 3);
-    assert.equal(waits, 2);
+test('CLI finishes after publish success even while registry still lacks the version', async t => {
+  const directory = await realpath(await mkdtemp(path.join(tmpdir(), 'cocos-publish-cli-')));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const files = {
+    'package.json': JSON.stringify({ version }),
+    'packages/cocos/package.json': JSON.stringify(manifests()[0]),
+    'packages/cocos-session-replay/package.json': JSON.stringify(manifests()[1]),
+    'src/core/version.ts': `export const FT_COCOS_SDK_VERSION = '${version}';`,
+    'src/session-replay/core/version.ts': `export const FT_COCOS_REPLAY_VERSION = '${version}';`,
+    'native/ios/FTCocosBridge.podspec': `s.version = '${version}'`,
+    'src/session-replay/native/ios/FTCocosReplayBridge.podspec': `s.version = '${version}'`,
+    'packages/cocos-session-replay/native-integration.json': JSON.stringify({ version, baseVersion: version }),
+    'registry.mjs': `
+      import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+      globalThis.fetch = async url => {
+        const events = existsSync(process.env.TEST_EVENTS) ? readFileSync(process.env.TEST_EVENTS, 'utf8') : '';
+        if (events.includes('publish ')) throw new Error('Registry queried after publishing');
+        const name = decodeURIComponent(new URL(url).pathname.slice(1));
+        appendFileSync(process.env.TEST_EVENTS, 'read ' + name + '\\n');
+        return { status: 200, ok: true, json: async () => ({ name, versions: {}, 'dist-tags': {} }) };
+      };
+    `,
+    'bin/npm': `#!/usr/bin/env node
+      const fs = require('node:fs');
+      const path = require('node:path');
+      const { createHash } = require('node:crypto');
+      const args = process.argv.slice(2);
+      if (args[0] === 'run') process.exit(0);
+      if (args[0] === 'pack') {
+        const name = args[args.indexOf('--workspace') + 1];
+        const replay = name.endsWith('session-replay');
+        const workspace = replay ? 'cocos-session-replay' : 'cocos';
+        const manifest = JSON.parse(fs.readFileSync('packages/' + workspace + '/package.json', 'utf8'));
+        const destination = args[args.indexOf('--pack-destination') + 1];
+        const filename = workspace + '.tgz';
+        const bytes = Buffer.from(name);
+        fs.writeFileSync(path.join(destination, filename), bytes);
+        const files = ['dist/creator2.js', 'dist/creator3.js', 'creator2/package.json',
+          'creator3/package.json', 'LICENSE', 'README.md', 'native/ios/Bridge.m'];
+        if (replay) files.push('components/ReplayPrivacy.ts');
+        console.log(JSON.stringify([{ name, version: manifest.version, filename,
+          integrity: 'sha512-' + createHash('sha512').update(bytes).digest('base64'),
+          files: files.map(path => ({ path })) }]));
+      } else if (args[0] === 'publish') {
+        const name = fs.readFileSync(args[1], 'utf8');
+        fs.appendFileSync(process.env.TEST_EVENTS, 'publish ' + name + '\\n');
+        if (name === process.env.TEST_FAIL_PACKAGE) process.exit(42);
+      } else {
+        throw new Error('Unexpected npm command: ' + args[0]);
+      }
+    `,
+  };
+  for (const [name, content] of Object.entries(files)) {
+    const target = path.join(directory, name);
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, content, { mode: name === 'bin/npm' ? 0o755 : 0o644 });
   }
-});
-
-test('matching metadata still requires the downloaded tarball to match', async () => {
-  const { plan, published } = publication();
-  await assert.rejects(verifyPublishedPackage(plan, {
-    getDocument: async () => published,
-    download: async () => Buffer.from('different content'),
-  }), /Downloaded tarball differs/);
-});
-
-test('partial release verifies the existing base before publishing Replay', async () => {
-  const { bytes, plan, published } = publication();
-  const replay = { ...artifacts()[1], tag: 'latest' };
-  const plans = planRelease([plan, replay], [published, null]);
-  const events = [];
-  await publishInOrder(plans, async item => { events.push(`publish ${item.name}`); }, async item => {
-    if (item.name === baseName) await verifyPublishedPackage(item, {
-      getDocument: async () => published, download: async () => bytes,
-    });
-    events.push(`verified ${item.name}`);
-  });
-  assert.deepEqual(events, [`verified ${baseName}`, `publish ${replayName}`, `verified ${replayName}`]);
+  await mkdir(path.join(directory, 'scripts'));
+  for (const name of ['publish-npm-token.mjs', 'release-policy.cjs']) {
+    await copyFile(new URL(name, import.meta.url), path.join(directory, 'scripts', name));
+  }
+  const eventsFile = path.join(directory, 'events');
+  const env = { ...process.env, PATH: path.join(directory, 'bin') + path.delimiter + process.env.PATH,
+    TEST_EVENTS: eventsFile, GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: 'GuanceCloud/datakit-cocos',
+    GITHUB_REF_NAME: 'agent_' + version, ACTIONS_ID_TOKEN_REQUEST_URL: 'https://example.invalid',
+    ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'test-only', TEST_FAIL_PACKAGE: '' };
+  const run = (mode, extra = {}) => promisify(execFile)(process.execPath,
+    ['--import', path.join(directory, 'registry.mjs'), path.join(directory, 'scripts/publish-npm-token.mjs'), mode],
+    { cwd: directory, env: { ...env, ...extra }, timeout: 15_000 });
+  const { stdout } = await run('--ci');
+  assert.match(stdout, /Both package publications completed/);
+  const reads = [`read ${baseName}`, `read ${replayName}`];
+  assert.deepEqual((await readFile(eventsFile, 'utf8')).trim().split('\n'),
+    [...reads, `publish ${baseName}`, `publish ${replayName}`]);
+  await writeFile(eventsFile, '');
+  await assert.rejects(run('--ci', { TEST_FAIL_PACKAGE: baseName }), /npm publish failed/);
+  assert.deepEqual((await readFile(eventsFile, 'utf8')).trim().split('\n'), [...reads, `publish ${baseName}`]);
+  await writeFile(eventsFile, '');
+  await run('--dry-run');
+  assert.deepEqual((await readFile(eventsFile, 'utf8')).trim().split('\n'), reads);
 });

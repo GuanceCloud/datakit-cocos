@@ -129,45 +129,20 @@ export function planRelease(artifacts, documents) {
   });
 }
 
-export async function publishInOrder(plans, publish, verify) {
+export async function publishInOrder(plans, publish) {
   for (const plan of plans) {
     if (!plan.skip) await publish(plan);
-    await verify(plan);
   }
 }
 
 export async function getRegistryDocument(name, fetcher = fetch) {
-  // A no-store request alone can still hit npm's CDN cache immediately after publish.
+  // Fetch fresh metadata for preflight conflict checks and retry planning.
   const response = await fetcher(`${registry}/${encodeURIComponent(name)}?release_check=${randomUUID()}`, {
     cache: 'no-store', signal: AbortSignal.timeout(30_000),
   });
   if (response.status === 404) return null;
   check(response.ok, `Registry lookup failed for ${name}: HTTP ${response.status}.`);
   return response.json();
-}
-
-export async function verifyPublishedPackage(plan, {
-  getDocument, download,
-  wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)),
-  attempts = 12, delay = 5_000,
-}) {
-  let published;
-  let pending;
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    const document = await getDocument(plan.name);
-    published = document?.versions?.[plan.version];
-    if (!published) pending = 'The registry has not exposed the published version yet';
-    else if (published.dist?.integrity !== plan.integrity) pending = 'Registry integrity metadata is missing or differs from the inspected tarball';
-    else if (document['dist-tags']?.[plan.tag] !== plan.version) pending = `The registry has not exposed dist-tag ${plan.tag} for this version`;
-    else { pending = undefined; break; }
-    if (attempt + 1 < attempts) await wait(delay);
-  }
-  check(!pending, `Could not verify ${plan.name}@${plan.version}: ${pending}. Publication may already have succeeded; rerun to verify and resume. No further package was published.`);
-  const url = new URL(published.dist.tarball);
-  check(url.origin === registry, 'Unexpected registry tarball host.');
-  const bytes = await download(url);
-  const integrity = `sha512-${createHash('sha512').update(bytes).digest('base64')}`;
-  check(integrity === plan.integrity, `Downloaded tarball differs for ${plan.name}; publication stopped before the next package.`);
 }
 
 function compareVersions(left, right) {
@@ -229,19 +204,6 @@ async function main(mode) {
     });
   }
 
-  const getDocument = getRegistryDocument;
-  async function verify(plan) {
-    await verifyPublishedPackage(plan, {
-      getDocument,
-      download: async url => {
-        const response = await fetch(url, { signal: AbortSignal.timeout(60_000) });
-        check(response.ok, `Cannot download the published tarball for ${plan.name}: HTTP ${response.status}.`);
-        return Buffer.from(await response.arrayBuffer());
-      },
-    });
-    console.log(`Verified ${plan.name}@${plan.version} (${plan.tag}).`);
-  }
-
   try {
     if (mode === '--ci') await writeFile(config, 'registry=https://registry.npmjs.org/\n', { mode: 0o600 });
     if (mode === '--publish') {
@@ -272,13 +234,12 @@ async function main(mode) {
     }
     // Check both registry identities before the first irreversible publication.
     const documents = [];
-    for (const artifact of artifacts) documents.push(await getDocument(artifact.name));
+    for (const artifact of artifacts) documents.push(await getRegistryDocument(artifact.name));
     check(documents[0], 'The existing base package was not found on the public registry. Check the registry before publishing.');
     const plans = planRelease(artifacts, documents);
     await writeFile(path.join(destination, 'release-plan.json'), `${JSON.stringify(plans, null, 2)}\n`);
     for (const plan of plans) console.log(`${plan.skip ? 'Already published' : 'Ready'}: ${plan.name}@${plan.version}, tag=${plan.tag}, ${plan.tarball}`);
     if (mode === '--dry-run') {
-      for (const plan of plans) if (plan.skip) await verify(plan);
       console.log('Dry run complete. No package or tag was published.');
       return;
     }
@@ -288,8 +249,9 @@ async function main(mode) {
       await command(['publish', plan.tarball, '--registry', registry, '--access', 'public', '--tag', plan.tag,
         '--ignore-scripts', '--workspaces=false', '--fetch-retries=0', '--fetch-timeout=60000'],
       { cwd: scratch, authenticated: true });
-    }, verify);
-    console.log('Both packages are published and verified.');
+      console.log(`Published ${plan.name}@${plan.version} (${plan.tag}).`);
+    });
+    console.log('Both package publications completed. Registry visibility is not checked after publishing.');
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }

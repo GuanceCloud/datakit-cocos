@@ -48,7 +48,7 @@ jobs:
       - run: npm ci
       # Both npm packages must trust this repository, workflow and environment.
       # npm >= 11.5.1 uses GitHub OIDC; no npm token secret is needed.
-      - name: Publish and verify both inspected tarballs
+      - name: Publish both inspected tarballs
         run: node scripts/publish-npm-token.mjs --ci
       - uses: actions/upload-artifact@v4
         if: always()
