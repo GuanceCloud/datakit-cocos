@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0-alpha.8
+
+### Features
+
+- **Percentage sampling configuration**: Add `sessionSamplingRate`, `sessionOnErrorSamplingRate`, `logSamplingRate`, `traceSamplingRate`, `sessionReplaySamplingRate`, and `sessionReplayOnErrorSamplingRate`. The new fields accept decimal percentages from `0` to `100`. Deprecated ratio fields retain their original `0` to `1` behavior; new fields take precedence, including an explicit `0`.
+
+### Migration
+
+- Existing integrations do not need to change. Use the new percentage fields for new integrations. Fractional percentages require floating-point support in the installed native SDK; older integer-only iOS SDKs reject fractional values instead of rounding them.
+
 ## 0.1.0-alpha.7
 
 ### Improvements

@@ -16,7 +16,7 @@ import type {
 import {
   captureFps,
   replayImagePolicy,
-  samplingRate,
+  validatedReplaySamplingConfig,
   type FTResolvedReplayImagePolicy,
 } from './validation.js';
 
@@ -109,11 +109,10 @@ export class FTSessionReplay {
       throw new Error('Hybrid Replay is managed by enterCocos() and leaveCocos()');
     }
     if (this.mode === 'standalone') return;
-    samplingRate(config.sampleRate, 'replay.sampleRate');
-    samplingRate(config.sessionOnErrorSampleRate, 'replay.sessionOnErrorSampleRate');
-    this.configureCapture(config);
+    const payload = validatedReplaySamplingConfig(config);
+    this.configureCapture(payload);
     this.validateNative?.();
-    this.transport.invoke('replay.configure', config as never);
+    this.transport.invoke('replay.configure', payload as never);
     this.mode = 'standalone';
     this.startCapture();
   }

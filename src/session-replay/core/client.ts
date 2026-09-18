@@ -2,7 +2,7 @@ import type { FTCocosSDK, FTNativeTransport, FTCocosEnterOptions } from '@cloudc
 import { FTSessionReplay, type FTCanvasCapture, type FTReplayPointerSource } from './replay.js';
 import type { FTCocosReplayConfig, FTCocosHybridReplayConfig, FTSessionReplayConfig, FTHybridSessionReplayConfig } from './types.js';
 import { FT_COCOS_REPLAY_VERSION } from './version.js';
-import { replayImagePolicy, captureFps, samplingRate } from './validation.js';
+import { replayImagePolicy, captureFps, validatedReplaySamplingConfig } from './validation.js';
 
 export interface FTReplayCapture extends FTCanvasCapture { setCamera(camera: unknown): void; }
 
@@ -122,8 +122,7 @@ export function composeSessionReplay(
         beforeStart: () => {
           if (pending === undefined) return;
           validateConfig(pending);
-          samplingRate(pending.sampleRate, 'replay.sampleRate');
-          samplingRate(pending.sessionOnErrorSampleRate, 'replay.sessionOnErrorSampleRate');
+          validatedReplaySamplingConfig(pending);
           validateNativeReplay(transport, false);
         },
         afterStart: () => { if (pending !== undefined) replay.start(pending); },

@@ -10,6 +10,7 @@
 #import "FTResourceContentModel.h"
 #import <UIKit/UIKit.h>
 #import <objc/message.h>
+#import <objc/runtime.h>
 
 @implementation FTCocosBridge
 
@@ -78,8 +79,22 @@
         NSString *appID = [self text:arguments[@"iosAppId"]];
         if (appID.length == 0) [self fail:@"rum.iosAppId is required on iOS"];
         FTRumConfig *config = [[FTRumConfig alloc] initWithAppid:appID];
-        if (arguments[@"sampleRate"]) config.sampleRate = [self percent:arguments[@"sampleRate"]];
-        if (arguments[@"sessionOnErrorSampleRate"]) config.sessionOnErrorSampleRate = [self percent:arguments[@"sessionOnErrorSampleRate"]];
+        if (arguments[@"sessionSamplingRate"]) {
+            [self setSamplingPercentage:arguments[@"sessionSamplingRate"]
+                               onObject:config
+                               property:@"sampleRate"
+                                  field:@"sessionSamplingRate"];
+        } else if (arguments[@"sampleRate"]) {
+            config.sampleRate = [self percent:arguments[@"sampleRate"]];
+        }
+        if (arguments[@"sessionOnErrorSamplingRate"]) {
+            [self setSamplingPercentage:arguments[@"sessionOnErrorSamplingRate"]
+                               onObject:config
+                               property:@"sessionOnErrorSampleRate"
+                                  field:@"sessionOnErrorSamplingRate"];
+        } else if (arguments[@"sessionOnErrorSampleRate"]) {
+            config.sessionOnErrorSampleRate = [self percent:arguments[@"sessionOnErrorSampleRate"]];
+        }
         if (arguments[@"enableNativeUserAction"]) config.enableTraceUserAction = [arguments[@"enableNativeUserAction"] boolValue];
         if (arguments[@"enableNativeUserView"]) config.enableTraceUserView = [arguments[@"enableNativeUserView"] boolValue];
         if (arguments[@"enableNativeUserResource"]) config.enableTraceUserResource = [arguments[@"enableNativeUserResource"] boolValue];
@@ -143,7 +158,14 @@
     }
     if ([method isEqualToString:@"logger.configure"]) {
         FTLoggerConfig *config = [[FTLoggerConfig alloc] init];
-        if (arguments[@"sampleRate"]) config.sampleRate = [self percent:arguments[@"sampleRate"]];
+        if (arguments[@"logSamplingRate"]) {
+            [self setSamplingPercentage:arguments[@"logSamplingRate"]
+                               onObject:config
+                               property:@"sampleRate"
+                                  field:@"logSamplingRate"];
+        } else if (arguments[@"sampleRate"]) {
+            config.sampleRate = [self percent:arguments[@"sampleRate"]];
+        }
         if (arguments[@"enableLinkRumData"]) config.enableLinkRumData = [arguments[@"enableLinkRumData"] boolValue];
         if (arguments[@"enableCustomLog"]) config.enableCustomLog = [arguments[@"enableCustomLog"] boolValue];
         if (arguments[@"printCustomLogToConsole"]) config.printCustomLogToConsole = [arguments[@"printCustomLogToConsole"] boolValue];
@@ -162,7 +184,14 @@
     }
     if ([method isEqualToString:@"trace.configure"]) {
         FTTraceConfig *config = [[FTTraceConfig alloc] init];
-        if (arguments[@"sampleRate"]) config.sampleRate = [self percent:arguments[@"sampleRate"]];
+        if (arguments[@"traceSamplingRate"]) {
+            [self setSamplingPercentage:arguments[@"traceSamplingRate"]
+                               onObject:config
+                               property:@"sampleRate"
+                                  field:@"traceSamplingRate"];
+        } else if (arguments[@"sampleRate"]) {
+            config.sampleRate = [self percent:arguments[@"sampleRate"]];
+        }
         if (arguments[@"enableLinkRumData"]) config.enableLinkRumData = [arguments[@"enableLinkRumData"] boolValue];
         if (arguments[@"enableNativeAutoTrace"]) config.enableAutoTrace = [arguments[@"enableNativeAutoTrace"] boolValue];
         config.networkTraceType = [self traceType:[self text:arguments[@"traceType"]]];
@@ -242,6 +271,34 @@
 
 + (int)percent:(NSNumber *)number {
     return (int)lround(MIN(1.0, MAX(0.0, number.doubleValue)) * 100.0);
+}
+
++ (void)setSamplingPercentage:(NSNumber *)number
+                     onObject:(id)object
+                     property:(NSString *)propertyName
+                        field:(NSString *)fieldName {
+    double percentage = number.doubleValue;
+    if (!isfinite(percentage) || percentage < 0.0 || percentage > 100.0) {
+        [self fail:[NSString stringWithFormat:@"%@ must be between 0 and 100", fieldName]];
+    }
+    objc_property_t property = class_getProperty([object class], propertyName.UTF8String);
+    const char *attributes = property ? property_getAttributes(property) : NULL;
+    if (!attributes || attributes[0] != 'T') {
+        [self fail:[NSString stringWithFormat:@"Native SDK does not expose %@", propertyName]];
+    }
+    switch (attributes[1]) {
+        case 'c': case 'i': case 's': case 'l': case 'q':
+        case 'C': case 'I': case 'S': case 'L': case 'Q': case 'B':
+            if (percentage != floor(percentage)) {
+                [self fail:[NSString stringWithFormat:
+                    @"Native iOS SDK does not support fractional sampling percentages for %@; upgrade the Native SDK",
+                    fieldName]];
+            }
+            break;
+        default:
+            break;
+    }
+    [object setValue:@(percentage) forKey:propertyName];
 }
 
 + (FTLogStatus)logStatus:(NSString *)value {
