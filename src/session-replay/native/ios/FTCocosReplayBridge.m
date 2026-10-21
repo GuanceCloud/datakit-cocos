@@ -4,7 +4,6 @@
 #import "FTSessionReplay.h"
 #import <UIKit/UIKit.h>
 #import <objc/message.h>
-#import <objc/runtime.h>
 
 @implementation FTCocosReplayBridge
 
@@ -43,18 +42,12 @@
         FTSessionReplayConfig *config = [[FTSessionReplayConfig alloc] init];
         [self ensureExternalReplayAPIForConfig:config];
         if (arguments[@"sessionReplaySamplingRate"]) {
-            [self setSamplingPercentage:arguments[@"sessionReplaySamplingRate"]
-                               onObject:config
-                               property:@"sampleRate"
-                                  field:@"sessionReplaySamplingRate"];
+            config.sessionReplaySamplingRate = [self samplingPercentage:arguments[@"sessionReplaySamplingRate"] field:@"sessionReplaySamplingRate"];
         } else if (arguments[@"sampleRate"]) {
             config.sampleRate = [self percent:arguments[@"sampleRate"]];
         }
         if (arguments[@"sessionReplayOnErrorSamplingRate"]) {
-            [self setSamplingPercentage:arguments[@"sessionReplayOnErrorSamplingRate"]
-                               onObject:config
-                               property:@"sessionReplayOnErrorSampleRate"
-                                  field:@"sessionReplayOnErrorSamplingRate"];
+            config.sessionReplayOnErrorSamplingRate = [self samplingPercentage:arguments[@"sessionReplayOnErrorSamplingRate"] field:@"sessionReplayOnErrorSamplingRate"];
         } else if (arguments[@"sessionOnErrorSampleRate"]) {
             config.sessionReplayOnErrorSampleRate = [self percent:arguments[@"sessionOnErrorSampleRate"]];
         }
@@ -283,32 +276,12 @@
     return (int)lround(MIN(1.0, MAX(0.0, number.doubleValue)) * 100.0);
 }
 
-+ (void)setSamplingPercentage:(NSNumber *)number
-                     onObject:(id)object
-                     property:(NSString *)propertyName
-                        field:(NSString *)fieldName {
++ (float)samplingPercentage:(NSNumber *)number field:(NSString *)fieldName {
     double percentage = number.doubleValue;
     if (!isfinite(percentage) || percentage < 0.0 || percentage > 100.0) {
         [self fail:[NSString stringWithFormat:@"%@ must be between 0 and 100", fieldName]];
     }
-    objc_property_t property = class_getProperty([object class], propertyName.UTF8String);
-    const char *attributes = property ? property_getAttributes(property) : NULL;
-    if (!attributes || attributes[0] != 'T') {
-        [self fail:[NSString stringWithFormat:@"Native SDK does not expose %@", propertyName]];
-    }
-    switch (attributes[1]) {
-        case 'c': case 'i': case 's': case 'l': case 'q':
-        case 'C': case 'I': case 'S': case 'L': case 'Q': case 'B':
-            if (percentage != floor(percentage)) {
-                [self fail:[NSString stringWithFormat:
-                    @"Native iOS SDK does not support fractional sampling percentages for %@; upgrade the Native SDK",
-                    fieldName]];
-            }
-            break;
-        default:
-            break;
-    }
-    [object setValue:@(percentage) forKey:propertyName];
+    return (float)percentage;
 }
 
 + (void)fail:(NSString *)message {

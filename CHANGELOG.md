@@ -6,9 +6,21 @@
 
 - **Percentage sampling configuration**: Add `sessionSamplingRate`, `sessionOnErrorSamplingRate`, `logSamplingRate`, `traceSamplingRate`, `sessionReplaySamplingRate`, and `sessionReplayOnErrorSamplingRate`. The new fields accept decimal percentages from `0` to `100`. Deprecated ratio fields retain their original `0` to `1` behavior; new fields take precedence, including an explicit `0`.
 
+### Improvements
+
+- **Native SDK dependencies**: Upgrade iOS Agent and Session Replay to `1.6.8-alpha.11`, Android Agent to `1.7.6-alpha09`, Android Session Replay to `0.1.9-alpha07`, and the Hybrid sample's Gradle Plugin to `1.3.9-alpha02`. Synchronize CocoaPods, SPM, native installers, and Hybrid sample dependencies.
+- **Native percentage sampling**: Use the native percentage APIs for RUM, logging, tracing, and Session Replay. iOS now accepts fractional percentages such as `0.1` without integer rounding. Legacy ratio fields retain their existing conversion behavior.
+
+### Fixes
+
+- **Hybrid iOS sample resources**: Avoid duplicate native and Cocos collection for the Creator 3 sample's network requests.
+- **npm release completion**: Finish publishing after both package uploads succeed without waiting for npm registry visibility. Registry propagation delays no longer interrupt publication of the package pair; version and content conflict checks still run before uploading either package.
+
 ### Migration
 
-- Existing integrations do not need to change. Use the new percentage fields for new integrations. Fractional percentages require floating-point support in the installed native SDK; older integer-only iOS SDKs reject fractional values instead of rounding them.
+- **Minimum iOS version is now 15.0**, as required by GuanceSDK `1.6.8-alpha.11`. SPM packages require Swift tools 5.5 or later. The installer raises lower generated deployment targets to iOS 15.0 and preserves higher targets. Applications that must support iOS 12–14 should remain on an earlier SDK release.
+- Upgrade `@cloudcare/cocos-sdk` and `@cloudcare/cocos-session-replay` together to `0.1.0-alpha.8`. Rerun `npx guance-cocos install --replay` for Replay integrations, or `npx guance-cocos install --no-replay` for base-only integrations, then regenerate and rebuild the native application. Resolve the updated CocoaPods or SPM dependencies before building iOS.
+- Prefer the new `0`–`100` percentage fields for new integrations. Existing `0`–`1` ratio fields remain supported; when both are supplied, the percentage field takes precedence.
 
 ## 0.1.0-alpha.7
 

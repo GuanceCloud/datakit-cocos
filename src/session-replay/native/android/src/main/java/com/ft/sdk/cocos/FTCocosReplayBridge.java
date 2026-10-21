@@ -108,9 +108,9 @@ public final class FTCocosReplayBridge {
 
     private static void configureReplay(JSONObject json) throws Exception {
         FTSessionReplayConfig config = new FTSessionReplayConfig();
-        if (json.has("sessionReplaySamplingRate")) config.setSampleRate(samplingPercentage(json, "sessionReplaySamplingRate"));
+        if (json.has("sessionReplaySamplingRate")) config.setSessionReplaySamplingRate(samplingPercentage(json, "sessionReplaySamplingRate"));
         else if (json.has("sampleRate")) config.setSampleRate((float) json.getDouble("sampleRate"));
-        if (json.has("sessionReplayOnErrorSamplingRate")) config.setSessionReplayOnErrorSampleRate(samplingPercentage(json, "sessionReplayOnErrorSamplingRate"));
+        if (json.has("sessionReplayOnErrorSamplingRate")) config.setSessionReplayOnErrorSamplingRate(samplingPercentage(json, "sessionReplayOnErrorSamplingRate"));
         else if (json.has("sessionOnErrorSampleRate")) config.setSessionReplayOnErrorSampleRate((float) json.getDouble("sessionOnErrorSampleRate"));
         if ("show".equals(json.optString("touchPrivacy"))) config.setTouchPrivacy(TouchPrivacy.SHOW);
         config.setInternalCallback(new SessionReplayInternalCallback() {
@@ -128,7 +128,7 @@ public final class FTCocosReplayBridge {
                 || percentage < 0d || percentage > 100d) {
             throw new IllegalArgumentException(key + " must be between 0 and 100");
         }
-        return (float) (percentage / 100d);
+        return (float) percentage;
     }
 
     private static String saveReplayImage(JSONObject json) throws Exception {

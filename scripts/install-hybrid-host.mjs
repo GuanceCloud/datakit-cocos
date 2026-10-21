@@ -187,7 +187,7 @@ function patchFTPluginClasspath(file) {
     "    maven { url 'https://mvnrepo.guance.com/repository/maven-releases' }",
     '}',
     'dependencies {',
-    "    classpath 'com.cloudcare.ft.mobile.sdk.tracker.plugin:ft-plugin:1.3.9-alpha01'",
+    "    classpath 'com.cloudcare.ft.mobile.sdk.tracker.plugin:ft-plugin:1.3.9-alpha02'",
     '}',
     FT_PLUGIN_END,
   ].join('\n');

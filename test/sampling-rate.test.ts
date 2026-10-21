@@ -139,7 +139,7 @@ describe('percentage sampling configuration', () => {
 });
 
 describe('native percentage bridge contract', () => {
-  it('maps new Android percentage keys once and keeps legacy ratio setters', () => {
+  it('uses native Android percentage setters and keeps legacy ratio setters', () => {
     const base = readFileSync(resolve(
       'native/android/src/main/java/com/ft/sdk/cocos/FTCocosBridge.java',
     ), 'utf8');
@@ -152,18 +152,18 @@ describe('native percentage bridge contract', () => {
       'sessionOnErrorSamplingRate',
       'logSamplingRate',
       'traceSamplingRate',
-    ]) expect(base).toContain(`json.has("${field}")`);
+    ]) expect(base).toContain(`config.set${field.charAt(0).toUpperCase()}${field.slice(1)}(samplingPercentage(json, "${field}"))`);
     for (const field of [
       'sessionReplaySamplingRate',
       'sessionReplayOnErrorSamplingRate',
-    ]) expect(replay).toContain(`json.has("${field}")`);
+    ]) expect(replay).toContain(`config.set${field.charAt(0).toUpperCase()}${field.slice(1)}(samplingPercentage(json, "${field}"))`);
     expect(base).toContain('samplingPercentage(json');
     expect(replay).toContain('samplingPercentage(json');
     expect(base).toContain('json.has("sampleRate")');
     expect(replay).toContain('json.has("sampleRate")');
   });
 
-  it('maps new iOS percentage keys and rejects fractional values on integer native APIs', () => {
+  it('uses native iOS floating-point percentage properties and keeps legacy ratio setters', () => {
     const base = readFileSync(resolve('native/ios/FTCocosBridge.m'), 'utf8');
     const replay = readFileSync(resolve(
       'src/session-replay/native/ios/FTCocosReplayBridge.m',
@@ -174,13 +174,13 @@ describe('native percentage bridge contract', () => {
       'sessionOnErrorSamplingRate',
       'logSamplingRate',
       'traceSamplingRate',
-    ]) expect(base).toContain(`arguments[@"${field}"]`);
+    ]) expect(base).toContain(`config.${field} = [self samplingPercentage:arguments[@"${field}"]`);
     for (const field of [
       'sessionReplaySamplingRate',
       'sessionReplayOnErrorSamplingRate',
-    ]) expect(replay).toContain(`arguments[@"${field}"]`);
-    expect(base).toContain('does not support fractional sampling percentages');
-    expect(replay).toContain('does not support fractional sampling percentages');
+    ]) expect(replay).toContain(`config.${field} = [self samplingPercentage:arguments[@"${field}"]`);
+    expect(base).toContain('return (float)percentage;');
+    expect(replay).toContain('return (float)percentage;');
     expect(base).toContain('arguments[@"sampleRate"]');
     expect(replay).toContain('arguments[@"sampleRate"]');
   });

@@ -180,9 +180,9 @@ public final class FTCocosBridge {
         String appId = json.optString("androidAppId", "");
         if (appId.isEmpty()) throw new IllegalArgumentException("rum.androidAppId is required on Android");
         final FTRUMConfig config = new FTRUMConfig().setRumAppId(appId);
-        if (json.has("sessionSamplingRate")) config.setSamplingRate(samplingPercentage(json, "sessionSamplingRate"));
+        if (json.has("sessionSamplingRate")) config.setSessionSamplingRate(samplingPercentage(json, "sessionSamplingRate"));
         else if (json.has("sampleRate")) config.setSamplingRate((float) json.getDouble("sampleRate"));
-        if (json.has("sessionOnErrorSamplingRate")) config.setSessionErrorSampleRate(samplingPercentage(json, "sessionOnErrorSamplingRate"));
+        if (json.has("sessionOnErrorSamplingRate")) config.setSessionOnErrorSamplingRate(samplingPercentage(json, "sessionOnErrorSamplingRate"));
         else if (json.has("sessionOnErrorSampleRate")) config.setSessionErrorSampleRate((float) json.getDouble("sessionOnErrorSampleRate"));
         if (json.has("enableNativeUserAction")) config.setEnableTraceUserAction(json.getBoolean("enableNativeUserAction"));
         if (json.has("enableNativeUserView")) config.setEnableTraceUserView(json.getBoolean("enableNativeUserView"));
@@ -206,7 +206,7 @@ public final class FTCocosBridge {
 
     private static void configureLogger(JSONObject json) throws Exception {
         final FTLoggerConfig config = new FTLoggerConfig();
-        if (json.has("logSamplingRate")) config.setSamplingRate(samplingPercentage(json, "logSamplingRate"));
+        if (json.has("logSamplingRate")) config.setLogSamplingRate(samplingPercentage(json, "logSamplingRate"));
         else if (json.has("sampleRate")) config.setSamplingRate((float) json.getDouble("sampleRate"));
         if (json.has("enableLinkRumData")) config.setEnableLinkRumData(json.getBoolean("enableLinkRumData"));
         if (json.has("enableCustomLog")) config.setEnableCustomLog(json.getBoolean("enableCustomLog"));
@@ -223,7 +223,7 @@ public final class FTCocosBridge {
 
     private static void configureTrace(JSONObject json) throws Exception {
         FTTraceConfig config = new FTTraceConfig();
-        if (json.has("traceSamplingRate")) config.setSamplingRate(samplingPercentage(json, "traceSamplingRate"));
+        if (json.has("traceSamplingRate")) config.setTraceSamplingRate(samplingPercentage(json, "traceSamplingRate"));
         else if (json.has("sampleRate")) config.setSamplingRate((float) json.getDouble("sampleRate"));
         if (json.has("enableLinkRumData")) config.setEnableLinkRUMData(json.getBoolean("enableLinkRumData"));
         if (json.has("enableNativeAutoTrace")) config.setEnableAutoTrace(json.getBoolean("enableNativeAutoTrace"));
@@ -237,7 +237,7 @@ public final class FTCocosBridge {
                 || percentage < 0d || percentage > 100d) {
             throw new IllegalArgumentException(key + " must be between 0 and 100");
         }
-        return (float) (percentage / 100d);
+        return (float) percentage;
     }
 
     private static void addResource(JSONObject payload) throws Exception {

@@ -9,8 +9,6 @@
 #import "FTResourceMetricsModel.h"
 #import "FTResourceContentModel.h"
 #import <UIKit/UIKit.h>
-#import <objc/message.h>
-#import <objc/runtime.h>
 
 @implementation FTCocosBridge
 
@@ -80,18 +78,12 @@
         if (appID.length == 0) [self fail:@"rum.iosAppId is required on iOS"];
         FTRumConfig *config = [[FTRumConfig alloc] initWithAppid:appID];
         if (arguments[@"sessionSamplingRate"]) {
-            [self setSamplingPercentage:arguments[@"sessionSamplingRate"]
-                               onObject:config
-                               property:@"sampleRate"
-                                  field:@"sessionSamplingRate"];
+            config.sessionSamplingRate = [self samplingPercentage:arguments[@"sessionSamplingRate"] field:@"sessionSamplingRate"];
         } else if (arguments[@"sampleRate"]) {
             config.sampleRate = [self percent:arguments[@"sampleRate"]];
         }
         if (arguments[@"sessionOnErrorSamplingRate"]) {
-            [self setSamplingPercentage:arguments[@"sessionOnErrorSamplingRate"]
-                               onObject:config
-                               property:@"sessionOnErrorSampleRate"
-                                  field:@"sessionOnErrorSamplingRate"];
+            config.sessionOnErrorSamplingRate = [self samplingPercentage:arguments[@"sessionOnErrorSamplingRate"] field:@"sessionOnErrorSamplingRate"];
         } else if (arguments[@"sessionOnErrorSampleRate"]) {
             config.sessionOnErrorSampleRate = [self percent:arguments[@"sessionOnErrorSampleRate"]];
         }
@@ -159,10 +151,7 @@
     if ([method isEqualToString:@"logger.configure"]) {
         FTLoggerConfig *config = [[FTLoggerConfig alloc] init];
         if (arguments[@"logSamplingRate"]) {
-            [self setSamplingPercentage:arguments[@"logSamplingRate"]
-                               onObject:config
-                               property:@"sampleRate"
-                                  field:@"logSamplingRate"];
+            config.logSamplingRate = [self samplingPercentage:arguments[@"logSamplingRate"] field:@"logSamplingRate"];
         } else if (arguments[@"sampleRate"]) {
             config.sampleRate = [self percent:arguments[@"sampleRate"]];
         }
@@ -185,10 +174,7 @@
     if ([method isEqualToString:@"trace.configure"]) {
         FTTraceConfig *config = [[FTTraceConfig alloc] init];
         if (arguments[@"traceSamplingRate"]) {
-            [self setSamplingPercentage:arguments[@"traceSamplingRate"]
-                               onObject:config
-                               property:@"sampleRate"
-                                  field:@"traceSamplingRate"];
+            config.traceSamplingRate = [self samplingPercentage:arguments[@"traceSamplingRate"] field:@"traceSamplingRate"];
         } else if (arguments[@"sampleRate"]) {
             config.sampleRate = [self percent:arguments[@"sampleRate"]];
         }
@@ -273,32 +259,12 @@
     return (int)lround(MIN(1.0, MAX(0.0, number.doubleValue)) * 100.0);
 }
 
-+ (void)setSamplingPercentage:(NSNumber *)number
-                     onObject:(id)object
-                     property:(NSString *)propertyName
-                        field:(NSString *)fieldName {
++ (float)samplingPercentage:(NSNumber *)number field:(NSString *)fieldName {
     double percentage = number.doubleValue;
     if (!isfinite(percentage) || percentage < 0.0 || percentage > 100.0) {
         [self fail:[NSString stringWithFormat:@"%@ must be between 0 and 100", fieldName]];
     }
-    objc_property_t property = class_getProperty([object class], propertyName.UTF8String);
-    const char *attributes = property ? property_getAttributes(property) : NULL;
-    if (!attributes || attributes[0] != 'T') {
-        [self fail:[NSString stringWithFormat:@"Native SDK does not expose %@", propertyName]];
-    }
-    switch (attributes[1]) {
-        case 'c': case 'i': case 's': case 'l': case 'q':
-        case 'C': case 'I': case 'S': case 'L': case 'Q': case 'B':
-            if (percentage != floor(percentage)) {
-                [self fail:[NSString stringWithFormat:
-                    @"Native iOS SDK does not support fractional sampling percentages for %@; upgrade the Native SDK",
-                    fieldName]];
-            }
-            break;
-        default:
-            break;
-    }
-    [object setValue:@(percentage) forKey:propertyName];
+    return (float)percentage;
 }
 
 + (FTLogStatus)logStatus:(NSString *)value {
