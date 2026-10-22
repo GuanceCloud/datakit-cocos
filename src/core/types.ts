@@ -190,7 +190,11 @@ export interface FTAutoTrackingConfig {
   errors?: boolean;
   /** Sends supported console output to the SDK logger. */
   console?: boolean;
-  /** Tracks supported network requests as RUM resources and traces. */
+  /**
+   * Tracks supported network requests as RUM resources and traces. In Hybrid
+   * mode, starts at attach() and stays active until detach(), including outside
+   * Cocos pages. In standalone mode, follows start()/shutdown().
+   */
   network?: boolean;
 }
 

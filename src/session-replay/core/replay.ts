@@ -72,7 +72,7 @@ export class FTSessionReplay {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private busy = false;
   private running = false;
-  private mode: 'idle' | 'standalone' | 'hybrid' = 'idle';
+  private mode: 'idle' | 'standalone' | 'hybrid' | 'hybrid-detached' = 'idle';
   private hybridReplayEnabled = false;
   private captureGeneration = 0;
   private config: Required<Pick<FTSessionReplayConfig, 'captureFps'>> = { captureFps: 1 };
@@ -105,7 +105,7 @@ export class FTSessionReplay {
    * @param config - Replay sampling, capture, and touch-privacy settings.
    */
   start(config: FTSessionReplayConfig = {}): void {
-    if (this.mode === 'hybrid') {
+    if (this.mode === 'hybrid' || this.mode === 'hybrid-detached') {
       throw new Error('Hybrid Replay is managed by enterCocos() and leaveCocos()');
     }
     if (this.mode === 'standalone') return;
@@ -129,11 +129,11 @@ export class FTSessionReplay {
   }
 
   /** @internal */
-  detachHybrid(): void {
-    if (this.mode !== 'hybrid') return;
+  detachHybrid(preserveNativeHost = false): void {
+    if (this.mode !== 'hybrid' && !preserveNativeHost) return;
     this.stopCapture();
     this.hybridReplayEnabled = false;
-    this.mode = 'idle';
+    this.mode = preserveNativeHost ? 'hybrid-detached' : 'idle';
   }
 
   /** @internal */
@@ -167,7 +167,7 @@ export class FTSessionReplay {
 
   /** Stops standalone Cocos canvas capture and native Session Replay. */
   stop(): void {
-    if (this.mode === 'hybrid') {
+    if (this.mode === 'hybrid' || this.mode === 'hybrid-detached') {
       throw new Error('Hybrid Replay is managed by enterCocos() and leaveCocos()');
     }
     if (this.mode === 'idle') return;

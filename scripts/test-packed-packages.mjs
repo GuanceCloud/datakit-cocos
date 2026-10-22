@@ -88,6 +88,8 @@ const require = createRequire(import.meta.url);
 const { guanceSdk: sdk2 } = require('@cloudcare/cocos-sdk/creator2');
 assert.equal('replay' in sdk2, false);
 assert.equal('replay' in sdk3, false);
+assert.equal(typeof sdk2.detach, 'function');
+assert.equal(typeof sdk3.detach, 'function');
 assert.throws(() => sdk2.start({ sdk: {}, replay: {} }), /withSessionReplay/);
 ${enabled ? `
 const { withSessionReplay: withReplay2 } = require('@cloudcare/cocos-session-replay/creator2');
@@ -98,6 +100,8 @@ assert.equal(replay2.rum, sdk2.rum);
 assert.equal(replay3.rum, sdk3.rum);
 assert.equal(withReplay2(sdk2), replay2);
 assert.equal(typeof replay3.setReplayCamera, 'function');
+assert.equal(typeof replay2.detach, 'function');
+assert.equal(typeof replay3.detach, 'function');
 assert.throws(() => withReplay3(sdk2), /does not match/);
 ` : `assert.throws(() => require.resolve('@cloudcare/cocos-session-replay/creator2'), /Cannot find module/);`}
 `;
@@ -106,6 +110,7 @@ assert.throws(() => withReplay3(sdk2), /does not match/);
     for (const [engine, suffix] of [['creator2', 'cts'], ['creator3', 'mts']]) {
       writeFileSync(path.join(consumer, `types.${suffix}`), `
 import { guanceSdk } from '@cloudcare/cocos-sdk/${engine}';
+guanceSdk.detach();
 // @ts-expect-error The base SDK must not expose Replay.
 guanceSdk.replay;
 // @ts-expect-error Replay configuration requires the optional facade.
@@ -114,6 +119,7 @@ ${enabled ? `import { withSessionReplay } from '@cloudcare/cocos-session-replay/
 const sdk = withSessionReplay(guanceSdk);
 sdk.attach({ replay: { captureFps: 2, touchPrivacy: 'hide' } });
 sdk.setReplayCamera({});
+sdk.detach();
 sdk.replay.setPrivacy({}, 'mask');` : ''}
 `);
     }
