@@ -6,7 +6,7 @@ let package = Package(
     platforms: [.iOS(.v15)],
     products: [.library(name: "FTCocosBridge", targets: ["FTCocosBridge"])],
     dependencies: [
-        .package(url: "https://github.com/GuanceCloud/datakit-ios.git", .exact("1.6.8-alpha.11")),
+        .package(url: "https://github.com/GuanceCloud/datakit-ios.git", .exact("1.6.8")),
     ],
     targets: [
         .target(

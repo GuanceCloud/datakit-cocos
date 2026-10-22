@@ -13,5 +13,5 @@ Pod::Spec.new do |s|
   # Cocos resolves FTCocosBridge by class name at runtime, so no direct symbol
   # reference would otherwise keep the Objective-C category/class in the app.
   s.user_target_xcconfig = { 'OTHER_LDFLAGS' => '$(inherited) -ObjC' }
-  s.dependency 'GuanceSDK/Agent', '1.6.8-alpha.11'
+  s.dependency 'GuanceSDK/Agent', '1.6.8'
 end

@@ -13,6 +13,6 @@ Pod::Spec.new do |s|
   # Cocos resolves FTCocosReplayBridge by class name at runtime, so no direct symbol
   # reference would otherwise keep the Objective-C category/class in the app.
   s.user_target_xcconfig = { 'OTHER_LDFLAGS' => '$(inherited) -ObjC' }
-  s.dependency 'GuanceSDK/FTSessionReplay', '1.6.8-alpha.11'
-  s.dependency 'GuanceSDK/Agent', '1.6.8-alpha.11'
+  s.dependency 'GuanceSDK/FTSessionReplay', '1.6.8'
+  s.dependency 'GuanceSDK/Agent', '1.6.8'
 end

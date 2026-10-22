@@ -34,7 +34,7 @@ function installNative(buildRoot, extensionRoot, logger = console) {
   const installedFile = path.join(extensionRoot, 'sdk-integration.json');
   const installed = fs.existsSync(installedFile) ? JSON.parse(fs.readFileSync(installedFile, 'utf8')) : null;
   if (installed?.replay && !replay) throw new Error('[cocos-sdk] Replay assets are missing. Run guance-cocos install --replay.');
-  if (replay && (replay.schemaVersion !== 1 || !installed || replay.baseVersion !== installed.version || replay.version !== installed.version || replay.iosSdkVersion !== '1.6.8-alpha.11')) {
+  if (replay && (replay.schemaVersion !== 1 || !installed || replay.baseVersion !== installed.version || replay.version !== installed.version || replay.iosSdkVersion !== '1.6.8')) {
     throw new Error('[cocos-sdk] Replay native integration version does not match the base SDK. Reinstall matching packages.');
   }
   const replaySource = path.join(extensionRoot, 'replay-native');
@@ -298,8 +298,8 @@ function patchGradle(file, nativeRoot, replay) {
     "    maven { url 'https://mvnrepo.guance.com/repository/maven-releases' }",
     '}',
     'dependencies {',
-    "    implementation 'com.cloudcare.ft.mobile.sdk.tracker.agent:ft-sdk:1.7.6-alpha09'",
-    "    implementation 'com.cloudcare.ft.mobile.sdk.tracker.agent:ft-native:1.1.3'",
+    "    implementation 'com.cloudcare.ft.mobile.sdk.tracker.agent:ft-sdk:1.7.6'",
+    "    implementation 'com.cloudcare.ft.mobile.sdk.tracker.agent:ft-native:1.1.4'",
     ...(replay ? [`    implementation '${escapeGroovy(replay.androidReplay)}'`] : []),
     "    implementation 'com.google.code.gson:gson:2.10.1'",
     "    implementation platform('org.jetbrains.kotlin:kotlin-bom:1.8.22')",
