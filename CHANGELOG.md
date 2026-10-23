@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.1.0
+
+Initial stable release for native Android and iOS applications built with Cocos Creator.
+
+### Features
+
+- **RUM collection**: Support automatic scene, touch, JavaScript error, and runtime-supported unhandled Promise rejection tracking, plus manual View, Action, Error, Long Task, and Resource instrumentation. Configure native crash, Android ANR, UI blocking, and device performance monitoring.
+- **Log collection**: Submit custom logs or capture Console output, with level filters, sampling, cache policies, and RUM session correlation.
+- **Network monitoring and tracing**: Collect request and response metadata and total duration for runtime-provided `fetch` and `XMLHttpRequest`, and inject trace headers. Support manual Resource tracking and trace header generation for custom network integrations. DNS, TCP, and SSL timing breakdowns require manual instrumentation.
+- **Optional Session Replay**: Provide `@cloudcare/cocos-session-replay` with Creator 2 and Creator 3 entry points. Compose it with the base SDK through `withSessionReplay(baseSdk)` to capture Cocos visuals and associate them with RUM sessions, with configurable sampling, error-session sampling, capture frequency, and image dimensions.
+- **Replay privacy and image controls**: Mask or hide nodes through the `ReplayPrivacy` component or code; input fields are masked and touch positions are hidden by default. Configure image quality presets and opt into per-image byte limits with `imagePolicy.maxFrameBytes`. Limits cover every image, including new-view and rotation frames, and do not impose a rolling traffic quota.
+- **Native-host Hybrid integration**: Reuse the SDK initialized by the native host through `guanceSdk.attach()`. Use `guanceSdk.enterCocos()` and `guanceSdk.leaveCocos()` to switch Cocos page tracking and Replay capture. When enabled, Cocos network tracking starts on attachment and remains active across page transitions without shutting down the host SDK.
+- **Percentage sampling**: Configure RUM, error-session, log, trace, Replay, and error-Replay sampling with `sessionSamplingRate`, `sessionOnErrorSamplingRate`, `logSamplingRate`, `traceSamplingRate`, `sessionReplaySamplingRate`, and `sessionReplayOnErrorSamplingRate`. Values accept decimal percentages from `0` to `100`; legacy ratio fields retain their `0` to `1` behavior, and percentage fields take precedence, including an explicit `0`.
+- **User context and installation**: Bind users and add global or per-event custom attributes, with DataKit or DataWay reporting. Provide Creator 2 and Creator 3 installation commands and native build extensions, with CocoaPods or Swift Package Manager for iOS.
+
+### Improvements
+
+- **Replay capture performance**: Perform native image encoding and Replay file reads and writes off the game thread on Android and iOS. Include image processing time in the configured capture interval.
+
+### Integration Requirements
+
+- Supports Cocos Creator 2.4.5–2.4.15 and 3.6.3–3.8.x; 3.0–3.6.2 is supported on a best-effort basis. Requires Android API 21+ or iOS 15.0+. Web, mini-game, and desktop targets are not supported.
+- Uses Android Agent `1.7.6`, Android Session Replay `0.1.9`, and iOS Agent / Session Replay `1.6.8`. Swift Package Manager requires Swift tools 5.5 or later.
+- Use `guanceSdk.start()` for standalone applications or `guanceSdk.attach()` after native-host initialization for Hybrid applications. These modes are mutually exclusive; Hybrid sampling is configured by the native host.
+- For Replay, install `@cloudcare/cocos-sdk` and `@cloudcare/cocos-session-replay` at the exact same version and compose them before `start()` or `attach()`. Run `npx guance-cocos install --replay`, or `npx guance-cocos install --no-replay` for base-only applications, then regenerate the native project, resolve dependencies, and rebuild.
+
 ## 0.1.0-alpha.8
 
 ### Features
