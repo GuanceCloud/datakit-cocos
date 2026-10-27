@@ -289,6 +289,7 @@ class HybridTelemetryRuntime {
           'returnToNative',
           '()V',
         );
+        this.waitForNativeReturn();
         return;
       }
       if (cc.sys.os === cc.sys.OS_IOS) {

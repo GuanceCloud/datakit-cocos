@@ -81,16 +81,18 @@ describe('Complete Hybrid Creator sample projects', () => {
     expect(application).toContain('FTAutoTrack.startApp(this)');
   });
 
-  it('isolates the Creator 2 engine process while the main process uploads data', () => {
+  it('keeps Creator 2 alive while a native page covers it in the same process', () => {
     const nativeActivity = sourceAt(
       'examples/hybrid-creator2/native-host/android/HybridSampleNativeActivity.java',
     );
     const sdk = sourceAt('examples/hybrid-creator2/native-host/android/HybridSampleSdk.java');
     expect(nativeActivity).not.toContain('FLAG_ACTIVITY_CLEAR_TASK');
     expect(sdk).not.toContain('FLAG_ACTIVITY_CLEAR_TASK');
-    expect(nativeActivity).toContain('intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)');
-    expect(sdk).toContain('activity.finishAndRemoveTask()');
-    expect(sdk).toContain('.setOnlySupportMainProcess(false)');
+    expect(nativeActivity).toContain('finish();');
+    expect(nativeActivity).not.toContain('FLAG_ACTIVITY_NEW_TASK');
+    expect(sdk).not.toContain('FLAG_ACTIVITY_NEW_TASK');
+    expect(sdk).not.toContain('finishAndRemoveTask');
+    expect(sdk).not.toContain('.setOnlySupportMainProcess(false)');
     expect(sourceAt('examples/hybrid-creator2/assets/Script/HybridTelemetrySample.ts')).toContain(
       'cc.director.once(cc.Director.EVENT_AFTER_DRAW',
     );
@@ -178,14 +180,18 @@ describe('Complete Hybrid Creator sample projects', () => {
     expect(manifest).toContain('android:name="com.cloudcare.cocos.sample.HybridSampleNativeActivity"');
     expect(manifest).toContain('android:name="com.cloudcare.cocos.sample.HybridSampleApplication"');
     if (creator === 2) {
-      expect(manifest).toContain('android:process=":cocos"');
+      expect(manifest).not.toContain('android:process=');
       const cocosTag = manifest.match(/<activity\b[^>]*android:name="org.cocos2dx.javascript.AppActivity"[^>]*>/)?.[0] || '';
-      expect(cocosTag).toContain('android:taskAffinity="${applicationId}.cocos"');
+      expect(cocosTag).toContain('android:taskAffinity=""');
       expect(cocosTag).toContain('android:launchMode="singleTask"');
       expect(count(cocosTag, 'android:taskAffinity=')).toBe(1);
       expect(count(cocosTag, 'android:launchMode=')).toBe(1);
-      expect(manifest).toContain('android:name="com.ft.sdk.cocos.FTCocosBridgeProvider"');
-      expect(manifest).toContain('android:authorities="${applicationId}.ft.cocos.bridge"');
+      expect(manifest).not.toContain('com.ft.sdk.cocos.FTCocosBridgeProvider');
+      const cocosElement = manifest.match(/<activity\b[^>]*android:name="org.cocos2dx.javascript.AppActivity"[\s\S]*?<\/activity>/)?.[0] || '';
+      expect(cocosElement).toContain('android.intent.category.LAUNCHER');
+      const nativeTag = manifest.match(/<activity\b[^>]*android:name="com.cloudcare.cocos.sample.HybridSampleNativeActivity"[^>]*>/)?.[0] || '';
+      expect(nativeTag).toContain('android:launchMode="standard"');
+      expect(nativeTag).toContain('android:exported="false"');
     } else {
       expect(manifest).not.toContain('android:process=":cocos"');
       expect(manifest).not.toContain('android:taskAffinity="${applicationId}.cocos"');
@@ -238,11 +244,21 @@ function writeFixture(
     '  <application>',
     `    <activity android:name="${cocosActivity}" android:exported="true"${legacyTask
       ? ' android:process=":old" android:taskAffinity="legacy.shared" android:launchMode="standard"' : ''}>`,
-    '      <intent-filter>',
-    '        <action android:name="android.intent.action.MAIN"/>',
-    '        <category android:name="android.intent.category.LAUNCHER"/>',
-    '      </intent-filter>',
+    ...(legacyTask ? [] : [
+      '      <intent-filter>',
+      '        <action android:name="android.intent.action.MAIN"/>',
+      '        <category android:name="android.intent.category.LAUNCHER"/>',
+      '      </intent-filter>',
+    ]),
     '    </activity>',
+    ...(legacyTask ? [
+      '<!-- COCOS_HYBRID_NATIVE_PAGE_BEGIN -->',
+      '<provider android:name="com.ft.sdk.cocos.FTCocosBridgeProvider" android:authorities="${applicationId}.ft.cocos.bridge" android:exported="false"/>',
+      '<activity android:name="com.cloudcare.cocos.sample.HybridSampleNativeActivity" android:launchMode="singleTask" android:exported="true">',
+      '<intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>',
+      '</activity>',
+      '<!-- COCOS_HYBRID_NATIVE_PAGE_END -->',
+    ] : []),
     '  </application>',
     '</manifest>',
     '',

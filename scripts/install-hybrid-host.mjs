@@ -221,14 +221,13 @@ function patchAndroidManifest(file, creatorVersion) {
   if (creatorVersion === '2') {
     const openingTag = appActivity.match(/<activity\b[^>]*>/)?.[0];
     if (!openingTag) fail(`Unable to locate ${cocosActivity} activity tag in ${file}`);
-    // Creator 2 requires a task-root Activity and cannot initialize a second
-    // V8 engine on another GL thread in the same process. Keep the native
-    // launcher in its own task and reuse the Cocos root on subsequent entries.
-    let cocosTag = openingTag;
+    // Creator 2 remains the task root in the application's default process.
+    // Native pages cover it and finish to return to the same engine instance.
+    let cocosTag = openingTag.replace(/\s+android:process\s*=\s*"[^"]*"/g, '');
     for (const [name, value] of Object.entries({
-      process: ':cocos',
-      taskAffinity: '${applicationId}.cocos',
+      taskAffinity: '',
       launchMode: 'singleTask',
+      exported: 'true',
     })) {
       const attribute = new RegExp(`\\bandroid:${name}\\s*=\\s*"[^"]*"`);
       cocosTag = attribute.test(cocosTag)
@@ -242,7 +241,18 @@ function patchAndroidManifest(file, creatorVersion) {
       ? ''
       : filter
   ));
-  let next = `${source.slice(0, activityStart)}${withoutLauncher}${source.slice(activityEnd)}`;
+  const launcher = [
+    '<intent-filter>',
+    '  <action android:name="android.intent.action.MAIN"/>',
+    '  <category android:name="android.intent.category.LAUNCHER"/>',
+    '</intent-filter>',
+  ].join('\n');
+  // Also migrate previously exported multi-process samples, including a
+  // self-closing Cocos Activity with its launcher moved to the native page.
+  const configuredActivity = creatorVersion === '2'
+    ? withoutLauncher.replace(/\/>$/, '></activity>').replace('</activity>', `${launcher}\n</activity>`)
+    : withoutLauncher;
+  let next = `${source.slice(0, activityStart)}${configuredActivity}${source.slice(activityEnd)}`;
   const applicationTag = next.match(/<application\b[^>]*>/)?.[0];
   if (!applicationTag) fail(`Unable to locate application element in ${file}`);
   const applicationClass = 'android:name="com.cloudcare.cocos.sample.HybridSampleApplication"';
@@ -254,14 +264,8 @@ function patchAndroidManifest(file, creatorVersion) {
   }
   const nativeActivity = [
     ANDROID_MANIFEST_BEGIN,
-    ...(creatorVersion === '2' ? [
-      '<provider android:name="com.ft.sdk.cocos.FTCocosBridgeProvider" android:authorities="${applicationId}.ft.cocos.bridge" android:exported="false"/>',
-    ] : []),
-    '<activity android:name="com.cloudcare.cocos.sample.HybridSampleNativeActivity" android:screenOrientation="sensorLandscape" android:label="@string/app_name" android:theme="@android:style/Theme.Material.NoActionBar" android:launchMode="singleTask" android:exported="true">',
-    '  <intent-filter>',
-    '    <action android:name="android.intent.action.MAIN"/>',
-    '    <category android:name="android.intent.category.LAUNCHER"/>',
-    '  </intent-filter>',
+    `<activity android:name="com.cloudcare.cocos.sample.HybridSampleNativeActivity" android:screenOrientation="sensorLandscape" android:label="@string/app_name" android:theme="@android:style/Theme.Material.NoActionBar" android:launchMode="${creatorVersion === '2' ? 'standard' : 'singleTask'}" android:exported="${creatorVersion !== '2'}">`,
+    ...(creatorVersion === '2' ? [] : [launcher]),
     '</activity>',
     ANDROID_MANIFEST_END,
   ].join('\n');

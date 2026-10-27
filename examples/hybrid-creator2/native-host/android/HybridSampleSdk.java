@@ -39,7 +39,6 @@ public final class HybridSampleSdk {
                 .setDebug(HybridSampleEnvironment.DEBUG)
                 .setServiceName(HybridSampleEnvironment.SERVICE_NAME)
                 .setEnv(HybridSampleEnvironment.ENV)
-                .setOnlySupportMainProcess(false)
                 .setEnableOkhttpRequestTag(true)
                 .addGlobalContext("sample_name", "cocos-hybrid-creator2");
         FTSdk.install(sdkConfig);
@@ -84,11 +83,9 @@ public final class HybridSampleSdk {
         if (activity == null) return;
         activity.runOnUiThread(() -> {
             Intent intent = new Intent(activity, HybridSampleNativeActivity.class);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             activity.startActivity(intent);
-            // Cocos owns a separate task. Finish its root so Creator 2 can
-            // terminate the engine process without clearing the native task.
-            activity.finishAndRemoveTask();
+            // Keep Cocos alive below the native page. Destroying the Creator 2
+            // task root would terminate this shared application process.
         });
     }
 
