@@ -58,8 +58,8 @@ The command is idempotent. On Android it registers `HybridSampleApplication`,
 which installs the SDK before the first Activity and then enables lifecycle
 tracking. It also keeps an idempotent `HybridSampleSdk.start()` fallback in
 `AppActivity.onCreate`, keeps the Cocos Activity as the launcher and task root,
-applies `ft-plugin:1.3.9-alpha01`, and adds OkHttp for the native automatic request.
-The Agent dependency is `1.7.6-alpha03`; the native owner enables both
+applies `ft-plugin:1.3.9`, and adds OkHttp for the native automatic request.
+The Agent dependency is `1.7.6`; the native owner enables both
 `setEnableTraceUserResource(true)` and `setEnableHttpURLConnectionResource(true)`.
 Android uses one process for Cocos, the native page, and the native SDK. The
 installer removes the previous `:cocos` process and bridge provider configuration.

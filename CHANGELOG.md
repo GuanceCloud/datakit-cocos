@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.1-alpha.1
+
+### Fixes
+
+- **Android Replay focus callbacks**: Upgrade Android Session Replay to `0.1.10-alpha01`, which forwards Window focus changes to the host and disables recorder callbacks retained under an outer wrapper after recording ownership changes. This fixes the Cocos rendering stop observed when returning from a full-screen native Activity. Android Agent remains `1.7.6`; iOS Agent / Session Replay remains `1.6.8`.
+- **Creator 2 Hybrid sample navigation**: Keep Cocos and native pages in one application process. Cocos remains the launcher and task root; closing a native page resumes the existing Cocos Activity without recreating the engine. The sample reclaims Cocos recording ownership after drawing resumes.
+
+### Migration
+
+- Upgrade `@cloudcare/cocos-sdk` and `@cloudcare/cocos-session-replay` together to `0.1.1-alpha.1`. Rerun `npx guance-cocos install --replay`, resolve native dependencies, and rebuild. Native hosts that manage Replay themselves must also upgrade Android Session Replay to `0.1.10-alpha01`.
+- Rerun the Creator 2 Hybrid sample's `native:install` command to migrate older exports from the separate Cocos process and bridge provider to the single-process Activity setup.
+
 ## 0.1.0
 
 Initial stable release for native Android and iOS applications built with Cocos Creator.
