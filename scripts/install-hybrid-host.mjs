@@ -221,10 +221,21 @@ function patchAndroidManifest(file, creatorVersion) {
   if (creatorVersion === '2') {
     const openingTag = appActivity.match(/<activity\b[^>]*>/)?.[0];
     if (!openingTag) fail(`Unable to locate ${cocosActivity} activity tag in ${file}`);
-    const withCocosProcess = /\bandroid:process\s*=/.test(openingTag)
-      ? openingTag.replace(/\bandroid:process\s*=\s*"[^"]*"/, 'android:process=":cocos"')
-      : openingTag.replace(/(\/?>)$/, ' android:process=":cocos"$1');
-    appActivity = appActivity.replace(openingTag, withCocosProcess);
+    // Creator 2 requires a task-root Activity and cannot initialize a second
+    // V8 engine on another GL thread in the same process. Keep the native
+    // launcher in its own task and reuse the Cocos root on subsequent entries.
+    let cocosTag = openingTag;
+    for (const [name, value] of Object.entries({
+      process: ':cocos',
+      taskAffinity: '${applicationId}.cocos',
+      launchMode: 'singleTask',
+    })) {
+      const attribute = new RegExp(`\\bandroid:${name}\\s*=\\s*"[^"]*"`);
+      cocosTag = attribute.test(cocosTag)
+        ? cocosTag.replace(attribute, `android:${name}="${value}"`)
+        : cocosTag.replace(/(\/?>)$/, ` android:${name}="${value}"$1`);
+    }
+    appActivity = appActivity.replace(openingTag, cocosTag);
   }
   const withoutLauncher = appActivity.replace(/\s*<intent-filter>[\s\S]*?<\/intent-filter>/g, (filter) => (
     filter.includes('android.intent.action.MAIN') && filter.includes('android.intent.category.LAUNCHER')

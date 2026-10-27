@@ -86,8 +86,10 @@ describe('Complete Hybrid Creator sample projects', () => {
       'examples/hybrid-creator2/native-host/android/HybridSampleNativeActivity.java',
     );
     const sdk = sourceAt('examples/hybrid-creator2/native-host/android/HybridSampleSdk.java');
-    expect(nativeActivity).toContain('Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK');
-    expect(sdk).toContain('Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK');
+    expect(nativeActivity).not.toContain('FLAG_ACTIVITY_CLEAR_TASK');
+    expect(sdk).not.toContain('FLAG_ACTIVITY_CLEAR_TASK');
+    expect(nativeActivity).toContain('intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)');
+    expect(sdk).toContain('activity.finishAndRemoveTask()');
     expect(sdk).toContain('.setOnlySupportMainProcess(false)');
     expect(sourceAt('examples/hybrid-creator2/assets/Script/HybridTelemetrySample.ts')).toContain(
       'cc.director.once(cc.Director.EVENT_AFTER_DRAW',
@@ -125,12 +127,13 @@ describe('Complete Hybrid Creator sample projects', () => {
   });
 
   it.each([
-    { creator: 2, extensionDirectory: 'packages', cocosActivity: 'org.cocos2dx.javascript.AppActivity' },
-    { creator: 3, extensionDirectory: 'extensions', cocosActivity: 'com.cocos.game.AppActivity' },
-  ])('installs the Creator $creator native owner idempotently', ({ creator, extensionDirectory, cocosActivity }) => {
+    { creator: 2, extensionDirectory: 'packages', cocosActivity: 'org.cocos2dx.javascript.AppActivity', legacyTask: false },
+    { creator: 2, extensionDirectory: 'packages', cocosActivity: 'org.cocos2dx.javascript.AppActivity', legacyTask: true },
+    { creator: 3, extensionDirectory: 'extensions', cocosActivity: 'com.cocos.game.AppActivity', legacyTask: false },
+  ])('installs the Creator $creator native owner idempotently (legacy task: $legacyTask)', ({ creator, extensionDirectory, cocosActivity, legacyTask }) => {
     const project = temporaryRoot();
     const build = path.join(project, 'build/native');
-    writeFixture(project, build, extensionDirectory, cocosActivity);
+    writeFixture(project, build, extensionDirectory, cocosActivity, legacyTask);
 
     const argumentsList = [
       'scripts/install-hybrid-host.mjs',
@@ -176,10 +179,16 @@ describe('Complete Hybrid Creator sample projects', () => {
     expect(manifest).toContain('android:name="com.cloudcare.cocos.sample.HybridSampleApplication"');
     if (creator === 2) {
       expect(manifest).toContain('android:process=":cocos"');
+      const cocosTag = manifest.match(/<activity\b[^>]*android:name="org.cocos2dx.javascript.AppActivity"[^>]*>/)?.[0] || '';
+      expect(cocosTag).toContain('android:taskAffinity="${applicationId}.cocos"');
+      expect(cocosTag).toContain('android:launchMode="singleTask"');
+      expect(count(cocosTag, 'android:taskAffinity=')).toBe(1);
+      expect(count(cocosTag, 'android:launchMode=')).toBe(1);
       expect(manifest).toContain('android:name="com.ft.sdk.cocos.FTCocosBridgeProvider"');
       expect(manifest).toContain('android:authorities="${applicationId}.ft.cocos.bridge"');
     } else {
       expect(manifest).not.toContain('android:process=":cocos"');
+      expect(manifest).not.toContain('android:taskAffinity="${applicationId}.cocos"');
       expect(manifest).not.toContain('android:name="com.ft.sdk.cocos.FTCocosBridgeProvider"');
     }
     expect(manifest.match(/android.intent.category.LAUNCHER/g)).toHaveLength(1);
@@ -199,6 +208,7 @@ function writeFixture(
   build: string,
   extensionDirectory: string,
   cocosActivity: string,
+  legacyTask: boolean,
 ): void {
   write(path.join(project, extensionDirectory, 'guance-cocos-sdk/install-native.cjs'), 'exports.installNative = () => {};\n');
   for (const relativePath of [
@@ -226,7 +236,8 @@ function writeFixture(
   write(path.join(build, 'android/app/AndroidManifest.xml'), [
     '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
     '  <application>',
-    `    <activity android:name="${cocosActivity}" android:exported="true">`,
+    `    <activity android:name="${cocosActivity}" android:exported="true"${legacyTask
+      ? ' android:process=":old" android:taskAffinity="legacy.shared" android:launchMode="standard"' : ''}>`,
     '      <intent-filter>',
     '        <action android:name="android.intent.action.MAIN"/>',
     '        <category android:name="android.intent.category.LAUNCHER"/>',

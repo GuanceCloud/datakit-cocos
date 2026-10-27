@@ -116,8 +116,9 @@ public final class HybridSampleNativeActivity extends Activity {
         status.setText("Opening Cocos page…");
         Intent intent = new Intent();
         intent.setClassName(getPackageName(), COCOS_ACTIVITY);
-        // Creator 2's Cocos2dxActivity requires itself to be the task root.
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        // The installer gives Cocos its own singleTask root. Reuse that Activity
+        // after Home/launcher navigation instead of rebuilding V8 in its process.
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(intent);
     }
 

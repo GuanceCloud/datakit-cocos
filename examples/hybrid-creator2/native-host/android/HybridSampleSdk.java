@@ -84,8 +84,11 @@ public final class HybridSampleSdk {
         if (activity == null) return;
         activity.runOnUiThread(() -> {
             Intent intent = new Intent(activity, HybridSampleNativeActivity.class);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             activity.startActivity(intent);
+            // Cocos owns a separate task. Finish its root so Creator 2 can
+            // terminate the engine process without clearing the native task.
+            activity.finishAndRemoveTask();
         });
     }
 

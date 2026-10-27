@@ -63,9 +63,13 @@ The Agent dependency is `1.7.6-alpha03`; the native owner enables both
 `setEnableTraceUserResource(true)` and `setEnableHttpURLConnectionResource(true)`.
 Because Creator 2 terminates its process when `Cocos2dxActivity` is destroyed,
 the installer runs that Activity in the app-local `:cocos` process and enables
-SDK collection outside the main process. The native main process remains alive
-and owns data upload, so switching pages can rebuild the engine without losing
-queued RUM, Log, Trace, or Replay data.
+SDK collection outside the main process. It also gives Cocos a separate task
+affinity (`${applicationId}.cocos`) and `singleTask` launch mode. Opening Cocos
+after Home or from the native launcher reuses the existing Activity and engine;
+do not add `FLAG_ACTIVITY_CLEAR_TASK` to this entry path. The explicit **Native
+page** action finishes and removes the Cocos task, allowing Creator 2 to terminate
+its engine process. The native main process remains alive and owns data upload.
+Run `native:install` again for existing native exports to apply this task setup.
 On iOS it adds `[HybridSampleSDK start]` to
 `didFinishLaunchingWithOptions` and presents the native sample page.
 
