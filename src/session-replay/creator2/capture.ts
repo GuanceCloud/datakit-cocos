@@ -5,6 +5,7 @@ import { persistReplayFrame, disposeReplayFrame } from '../core/replay-file.js';
 import { projectPrivacyBounds } from '../core/replay-privacy.js';
 import { collectReplayPrivacyNodes } from '../core/replay-privacy-nodes.js';
 import type { FTCapturedFrame, FTPrivacyRegion, FTReplayPrivacyMode, FTStoredFrame } from '../core/types.js';
+import { createReplayTarget } from './render-target.js';
 
 export class FTCreator2CanvasCapture implements FTCanvasCapture {
   private camera: any;
@@ -33,10 +34,9 @@ export class FTCreator2CanvasCapture implements FTCanvasCapture {
     const scale = Math.min(1, maxImageDimension / Math.max(visible.width, visible.height));
     const width = Math.max(1, Math.round(visible.width * scale));
     const height = Math.max(1, Math.round(visible.height * scale));
-    const texture = new cc.RenderTexture();
-    texture.initWithSize(width, height, cc.gfx?.RB_FMT_D24S8);
     const previous = camera.targetTexture;
     const previousClearFlags = camera.clearFlags;
+    const target = createReplayTarget(width, height, previous);
     let pixels: Uint8Array | undefined;
     let privacyRegions: FTPrivacyRegion[] = [];
     try {
@@ -44,14 +44,14 @@ export class FTCreator2CanvasCapture implements FTCanvasCapture {
       // RenderTexture can therefore expose stale GPU color data anywhere the
       // scene does not draw, which appears as overlapping strips in replay.
       camera.clearFlags = previousClearFlags | cc.Camera.ClearFlags.COLOR;
-      camera.targetTexture = texture;
+      camera.targetTexture = target.texture;
       await new Promise<void>((resolve) => cc.director.once(cc.Director.EVENT_AFTER_DRAW, resolve));
-      pixels = texture.readPixels();
+      pixels = target.readPixels();
       if (pixels) privacyRegions = this.collectPrivacyRegions(camera, width, height, visible.width, visible.height);
     } finally {
       camera.targetTexture = previous;
       camera.clearFlags = previousClearFlags;
-      texture.destroy();
+      target.dispose();
     }
     if (!pixels) return undefined;
     // Creator 2 native rendering uses OpenGL, including on iOS. RenderTexture
