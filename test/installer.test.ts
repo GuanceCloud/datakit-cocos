@@ -219,6 +219,7 @@ describe('native build integration', () => {
     mkdirSync(join(extension, 'native', 'android'), { recursive: true });
     cpSync(resolve('integrations/creator3/dist/hooks.js'), join(extension, 'dist', 'hooks.js'));
     cpSync(resolve('integrations/shared/install-native.cjs'), join(extension, 'install-native.cjs'));
+    cpSync(resolve('integrations/shared/project-configuration.cjs'), join(extension, 'project-configuration.cjs'));
     for (const helper of ['managed-assets.cjs', 'legacy-asset-hashes.json']) cpSync(resolve('integrations/shared', helper), join(extension, helper));
     createReplayExtension(root, extension);
     writeFileSync(join(extension, 'native', 'android', 'bridge.txt'), 'bridge');
@@ -328,6 +329,7 @@ describe('native build integration', () => {
     mkdirSync(xcodeProject, { recursive: true });
     cpSync(resolve('integrations/creator3/dist/hooks.js'), join(extension, 'dist', 'hooks.js'));
     cpSync(resolve('integrations/shared/install-native.cjs'), join(extension, 'install-native.cjs'));
+    cpSync(resolve('integrations/shared/project-configuration.cjs'), join(extension, 'project-configuration.cjs'));
     for (const helper of ['managed-assets.cjs', 'legacy-asset-hashes.json']) cpSync(resolve('integrations/shared', helper), join(extension, helper));
     cpSync(resolve('native'), join(extension, 'native'), { recursive: true });
     writeFileSync(join(xcodeProject, 'project.pbxproj'), [

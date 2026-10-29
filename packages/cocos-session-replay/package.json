@@ -40,7 +40,8 @@
     "native-integration.json",
     "README.md",
     "LICENSE",
-    "THIRD_PARTY_NOTICES"
+    "THIRD_PARTY_NOTICES",
+    "runtime"
   ],
   "engines": {
     "node": ">=14"

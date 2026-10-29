@@ -58,6 +58,14 @@ try {
     const spec = published ? [`${manifest.name}@${manifest.version}`, '--registry', registry] : ['--workspace', manifest.name];
     const [packed] = JSON.parse(run(npm, ['pack', ...spec, '--json', '--ignore-scripts', '--pack-destination', temporary], published ? temporary : root));
     validatePackedPackage(packed, manifest, directory !== 'cocos');
+    if (!published && directory === 'cocos') {
+      for (const file of ['web/bootstrap.js', 'web/bootstrap.js.map', 'runtime/native.js', 'bin/web-assets.cjs',
+        'extensions/creator2/install-web.cjs', 'extensions/creator3/install-web.cjs',
+        'web/creator2/package.json', 'web/creator3/package.json',
+        'dist/creator2/web/creator2.js', 'dist/creator3/web/creator3.js']) {
+        assert.ok(packed.files.some(entry => entry.path === file), `Missing packed Web integration asset: ${file}`);
+      }
+    }
     tarballs.push(path.join(temporary, packed.filename));
     console.log(`${manifest.name}: ${packed.entryCount} files, ${packed.size} compressed bytes.`);
   }
@@ -82,6 +90,26 @@ try {
     }
     run(process.execPath, [cli, 'install', '--project', consumer, '--creator', String(creator), enabled ? '--replay' : '--no-replay']);
     run(process.execPath, [cli, 'install', '--project', consumer, '--creator', String(creator)]);
+    if (!published) {
+      const meta = JSON.parse(readFileSync(path.join(consumer, 'assets/guance-cocos-sdk-runtime/native.js.meta'), 'utf8'));
+      const flags = creator === 2 ? meta : meta.userData;
+      assert.equal(flags.isPlugin, true);
+      assert.equal(flags.loadPluginInWeb, false);
+      assert.equal(flags.loadPluginInNative, true);
+      assert.equal(flags.loadPluginInEditor, true);
+      if (creator === 3) assert.equal(flags.loadPluginInMiniGame, false);
+      const metaFile = path.join(consumer, 'assets/guance-cocos-sdk-runtime/native.js.meta');
+      meta.uuid = 'keep-runtime-asset-reference';
+      meta.ver = creator === 2 ? '1.1.0' : '4.0.24';
+      const upgraded = JSON.stringify(meta);
+      writeFileSync(metaFile, upgraded);
+      run(process.execPath, [cli, 'install', '--project', consumer, '--creator', String(creator)]);
+      assert.equal(readFileSync(metaFile, 'utf8'), upgraded);
+      flags.loadPluginInWeb = true;
+      writeFileSync(metaFile, JSON.stringify(meta));
+      assert.throws(() => run(process.execPath, [cli, 'install', '--project', consumer, '--creator', String(creator)]), /loaded only on native platforms/);
+      writeFileSync(metaFile, upgraded);
+    }
     const extension = path.join(consumer, creator === 2 ? 'packages' : 'extensions', 'guance-cocos-sdk');
     const { installNative } = require(path.join(extension, 'install-native.cjs'));
     const build = path.join(consumer, 'build');
@@ -107,19 +135,21 @@ try {
     const ccRoot = path.join(consumer, 'node_modules/cc');
     mkdirSync(ccRoot, { recursive: true });
     writeFileSync(path.join(ccRoot, 'package.json'), JSON.stringify({ name: 'cc', type: 'module', exports: { '.': './index.js', './env': './env.js' } }));
-    writeFileSync(path.join(ccRoot, 'env.js'), 'export const NATIVE = false;');
-    writeFileSync(path.join(ccRoot, 'index.js'), 'export const Camera={},Director={},EditBox={},Node={},RenderTexture={},UITransform={},Vec3={},director={},isValid=()=>true,native={},sys={},view={},Input={},input={};');
+    writeFileSync(path.join(ccRoot, 'env.js'), published ? 'export const NATIVE = false, EDITOR = false;' : 'export const NATIVE = true, EDITOR = false;');
+    writeFileSync(path.join(ccRoot, 'index.js'), `export const Camera={},Director={},EditBox={},Node={},RenderTexture={},UITransform={},Vec3={},director={},isValid=()=>true,native={},sys={os:'test',OS:{ANDROID:'android',IOS:'ios'}},view={},Input={},input={};`);
     const sample = `
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { guanceSdk as sdk3 } from '@cloudcare/cocos-sdk/creator3';
 const require = createRequire(import.meta.url);
 const { guanceSdk: sdk2 } = require('@cloudcare/cocos-sdk/creator2');
-assert.equal('replay' in sdk2, false);
-assert.equal('replay' in sdk3, false);
+${published ? '' : `globalThis.CC_JSB = true; globalThis.cc = { sys: { os: 'test', OS_ANDROID: 'android', OS_IOS: 'ios' } };
+require('./assets/guance-cocos-sdk-runtime/native.js');`}
+assert.equal('replay' in sdk2, ${!published});
+assert.equal('replay' in sdk3, ${!published});
 assert.equal(typeof sdk2.detach, 'function');
 assert.equal(typeof sdk3.detach, 'function');
-assert.throws(() => sdk2.start({ sdk: {}, replay: {} }), /withSessionReplay/);
+${published ? 'assert.throws(() => sdk2.start({ sdk: {}, replay: {} }), /withSessionReplay/);' : ''}
 ${enabled ? `
 const { withSessionReplay: withReplay2 } = require('@cloudcare/cocos-session-replay/creator2');
 const { withSessionReplay: withReplay3 } = await import('@cloudcare/cocos-session-replay/creator3');
@@ -140,8 +170,9 @@ assert.throws(() => withReplay3(sdk2), /does not match/);
       writeFileSync(path.join(consumer, `types.${suffix}`), `
 import { guanceSdk } from '@cloudcare/cocos-sdk/${engine}';
 guanceSdk.detach();
-// @ts-expect-error The base SDK must not expose Replay.
+${published ? '// @ts-expect-error The published base SDK does not expose Replay.' : ''}
 guanceSdk.replay;
+${published ? '' : 'guanceSdk.replay.start(); guanceSdk.replay.stop(); guanceSdk.stop();'}
 // @ts-expect-error Replay configuration requires the optional facade.
 guanceSdk.attach({ replay: {} });
 ${enabled ? `import { withSessionReplay } from '@cloudcare/cocos-session-replay/${engine}';
