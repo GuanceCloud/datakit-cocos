@@ -58,7 +58,7 @@ try {
     const spec = published ? [`${manifest.name}@${manifest.version}`, '--registry', registry] : ['--workspace', manifest.name];
     const [packed] = JSON.parse(run(npm, ['pack', ...spec, '--json', '--ignore-scripts', '--pack-destination', temporary], published ? temporary : root));
     validatePackedPackage(packed, manifest, directory !== 'cocos');
-    if (!published && directory === 'cocos') {
+    if (directory === 'cocos') {
       for (const file of ['web/bootstrap.js', 'web/bootstrap.js.map', 'runtime/native.js', 'bin/web-assets.cjs',
         'extensions/creator2/install-web.cjs', 'extensions/creator3/install-web.cjs',
         'web/creator2/package.json', 'web/creator3/package.json',
@@ -90,7 +90,7 @@ try {
     }
     run(process.execPath, [cli, 'install', '--project', consumer, '--creator', String(creator), enabled ? '--replay' : '--no-replay']);
     run(process.execPath, [cli, 'install', '--project', consumer, '--creator', String(creator)]);
-    if (!published) {
+    {
       const meta = JSON.parse(readFileSync(path.join(consumer, 'assets/guance-cocos-sdk-runtime/native.js.meta'), 'utf8'));
       const flags = creator === 2 ? meta : meta.userData;
       assert.equal(flags.isPlugin, true);
@@ -135,7 +135,7 @@ try {
     const ccRoot = path.join(consumer, 'node_modules/cc');
     mkdirSync(ccRoot, { recursive: true });
     writeFileSync(path.join(ccRoot, 'package.json'), JSON.stringify({ name: 'cc', type: 'module', exports: { '.': './index.js', './env': './env.js' } }));
-    writeFileSync(path.join(ccRoot, 'env.js'), published ? 'export const NATIVE = false, EDITOR = false;' : 'export const NATIVE = true, EDITOR = false;');
+    writeFileSync(path.join(ccRoot, 'env.js'), 'export const NATIVE = true, EDITOR = false;');
     writeFileSync(path.join(ccRoot, 'index.js'), `export const Camera={},Director={},EditBox={},Node={},RenderTexture={},UITransform={},Vec3={},director={},isValid=()=>true,native={},sys={os:'test',OS:{ANDROID:'android',IOS:'ios'}},view={},Input={},input={};`);
     const sample = `
 import assert from 'node:assert/strict';
@@ -143,13 +143,14 @@ import { createRequire } from 'node:module';
 import { guanceSdk as sdk3 } from '@cloudcare/cocos-sdk/creator3';
 const require = createRequire(import.meta.url);
 const { guanceSdk: sdk2 } = require('@cloudcare/cocos-sdk/creator2');
-${published ? '' : `globalThis.CC_JSB = true; globalThis.cc = { sys: { os: 'test', OS_ANDROID: 'android', OS_IOS: 'ios' } };
-require('./assets/guance-cocos-sdk-runtime/native.js');`}
-assert.equal('replay' in sdk2, ${!published});
-assert.equal('replay' in sdk3, ${!published});
+globalThis.CC_JSB = true; globalThis.cc = { sys: { os: 'test', OS_ANDROID: 'android', OS_IOS: 'ios' } };
+require('./assets/guance-cocos-sdk-runtime/native.js');
+assert.equal('replay' in sdk2, true);
+assert.equal('replay' in sdk3, true);
 assert.equal(typeof sdk2.detach, 'function');
 assert.equal(typeof sdk3.detach, 'function');
-${published ? 'assert.throws(() => sdk2.start({ sdk: {}, replay: {} }), /withSessionReplay/);' : ''}
+assert.throws(() => sdk2.replay.start(), /Start or attach/);
+assert.throws(() => sdk3.replay.start(), /Start or attach/);
 ${enabled ? `
 const { withSessionReplay: withReplay2 } = require('@cloudcare/cocos-session-replay/creator2');
 const { withSessionReplay: withReplay3 } = await import('@cloudcare/cocos-session-replay/creator3');
@@ -170,9 +171,8 @@ assert.throws(() => withReplay3(sdk2), /does not match/);
       writeFileSync(path.join(consumer, `types.${suffix}`), `
 import { guanceSdk } from '@cloudcare/cocos-sdk/${engine}';
 guanceSdk.detach();
-${published ? '// @ts-expect-error The published base SDK does not expose Replay.' : ''}
 guanceSdk.replay;
-${published ? '' : 'guanceSdk.replay.start(); guanceSdk.replay.stop(); guanceSdk.stop();'}
+guanceSdk.replay.start(); guanceSdk.replay.stop(); guanceSdk.stop();
 // @ts-expect-error Replay configuration requires the optional facade.
 guanceSdk.attach({ replay: {} });
 ${enabled ? `import { withSessionReplay } from '@cloudcare/cocos-session-replay/${engine}';
