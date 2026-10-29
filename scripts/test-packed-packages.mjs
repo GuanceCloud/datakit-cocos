@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -22,6 +22,31 @@ function run(command, args, cwd = root) {
   } catch (error) {
     throw new Error(`${command} failed:\n${String(error.stdout || '').slice(-4000)}\n${String(error.stderr || '').slice(-4000)}`);
   }
+}
+
+function checkCreator2SourceMaps(packageRoot) {
+  let count = 0;
+  function visit(directory) {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const file = path.join(directory, entry.name);
+      if (entry.isDirectory()) visit(file);
+      else if (entry.name.endsWith('.js.map')) {
+        const map = JSON.parse(readFileSync(file, 'utf8'));
+        // Creator 2.4.9 refine-sourcemap reads consumer.sourcesContent[0]
+        // without a null check, so every published JS map must embed its sources.
+        assert.ok(map.sources.length > 0, `${file}: missing sources`);
+        assert.ok(Array.isArray(map.sourcesContent), `${file}: missing sourcesContent`);
+        assert.equal(map.sourcesContent.length, map.sources.length, `${file}: incomplete sourcesContent`);
+        for (const source of map.sourcesContent) {
+          assert.ok(typeof source === 'string' && source.trim().length > 0, `${file}: empty source content`);
+        }
+        count++;
+      }
+    }
+  }
+  visit(path.join(packageRoot, 'dist/creator2'));
+  assert.ok(count > 0, `${packageRoot}: no Creator 2 source maps`);
+  console.log(`${path.basename(packageRoot)}: ${count} Creator 2 source maps embed source content.`);
 }
 
 try {
@@ -47,6 +72,10 @@ try {
     run(npm, ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--package-lock=false', ...install], consumer);
     const installed = path.join(consumer, 'node_modules/@cloudcare/cocos-sdk');
     assert.equal(JSON.parse(readFileSync(path.join(installed, 'package.json'), 'utf8')).version, manifests[0].version);
+    if (creator === 2) {
+      checkCreator2SourceMaps(installed);
+      if (enabled) checkCreator2SourceMaps(path.join(consumer, 'node_modules/@cloudcare/cocos-session-replay'));
+    }
     const cli = path.join(installed, 'bin/cli.cjs');
     if (!enabled) {
       assert.throws(() => run(process.execPath, [cli, 'install', '--project', consumer, '--creator', String(creator), '--replay']), /Session Replay is not installed/);
