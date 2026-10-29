@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'FTCocosReplayBridge'
-  s.version          = '0.1.1-alpha.1'
+  s.version          = '0.1.1-alpha.2'
   s.summary          = 'CloudCare Mobile SDK native bridge for Cocos Creator.'
   s.homepage         = 'https://github.com/GuanceCloud/datakit-cocos'
   s.license          = { :type => 'Apache-2.0' }

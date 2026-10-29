@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.1.1-alpha.2
+
+### Features
+
+- **Web support**: Add Web Mobile and Web Desktop integration for Creator 2 and Creator 3, including scene and action tracking, errors, logs, automatic network collection, and trace correlation. Web Error events include `cocos_error_state`.
+- **Web Session Replay**: Add optional canvas recording with sampling, capture frequency, image quality, dimensions, and per-image size limits. Canvas capture is blocked by default; protected nodes and input fields block the entire canvas rather than applying native node-level masks.
+- **Unified project configuration**: Configure native and Web collection and Replay through project settings, with shared sampling and platform-specific capture options.
+
+### Fixes
+
+- **Creator 2 native Replay**: Correct render-target setup and pixel readback to resolve incorrect Replay frame capture on Android and iOS.
+- **Creator 2 source maps**: Embed source content in base and Replay package source maps to address Creator 2 build compatibility when SourceMap is enabled.
+
+### Migration
+
+- Upgrade the base SDK and optional native Replay package together to `0.1.1-alpha.2`. Rerun the SDK installer and rebuild, including base-only native integrations, to install the required platform runtime.
+- Web integrations require separate Web reporting settings and application ID. Install Browser RUM / Logs `3.3.22` as needed, plus Browser WebGL `3.3.8` for Replay, then run the installer with `--web`. Web Replay must initialize before the Cocos engine.
+- Web does not support all native APIs, including timed Actions, manual Resource timing, manual Long Tasks, and manual trace-header generation.
+
 ## 0.1.1-alpha.1
 
 ### Fixes

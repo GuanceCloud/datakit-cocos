@@ -7,16 +7,16 @@
 
 ## Introduction
 
-Guance Cloud Application Monitoring collects and analyzes RUM, Log, and Trace data from Cocos Creator applications. The SDK supports native Android and iOS builds for Cocos Creator 2.4 and 3.x.
+Guance Cloud Application Monitoring collects and analyzes RUM, Log, and Trace data from Cocos Creator applications. The SDK supports native Android and iOS builds, plus Web Mobile and Web Desktop builds, for Cocos Creator 2.4 and 3.x.
 
 ## Supported Scope
 
-| Package entry | Supported Cocos Creator | Native targets |
+| Package entry | Supported Cocos Creator | Supported targets |
 | --- | --- | --- |
-| `@cloudcare/cocos-sdk/creator2` | 2.4.5–2.4.15 | Android API 21+, iOS 15+ |
-| `@cloudcare/cocos-sdk/creator3` | 3.6.3–3.8.x | Android API 21+, iOS 15+ |
+| `@cloudcare/cocos-sdk/creator2` | 2.4.5–2.4.15 | Android API 21+, iOS 15+, Web Mobile / Web Desktop |
+| `@cloudcare/cocos-sdk/creator3` | 3.6.3–3.8.x | Android API 21+, iOS 15+, Web Mobile / Web Desktop |
 
-Cocos Creator 3.0–3.6.2 is supported on a best-effort basis because the stable native build extension API starts at 3.6.3. Web, mini-game, and desktop targets are not currently supported.
+Cocos Creator 3.0–3.6.2 is supported on a best-effort basis because the stable native build extension API starts at 3.6.3. Mini-game and native desktop targets are not currently supported.
 
 ## Examples
 

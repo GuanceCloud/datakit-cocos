@@ -1,6 +1,6 @@
 {
   "name": "@cloudcare/cocos-session-replay",
-  "version": "0.1.1-alpha.1",
+  "version": "0.1.1-alpha.2",
   "description": "Optional Session Replay for the Guance Cocos Creator SDK",
   "license": "Apache-2.0",
   "author": "Guance Cloud",
@@ -54,6 +54,6 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@cloudcare/cocos-sdk": "0.1.1-alpha.1"
+    "@cloudcare/cocos-sdk": "0.1.1-alpha.2"
   }
 }
