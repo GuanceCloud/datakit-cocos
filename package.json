@@ -21,6 +21,7 @@
     "build:creator2": "tsc -p tsconfig.creator2.json",
     "build:creator3": "tsc -p tsconfig.creator3.json",
     "clean": "node scripts/clean.mjs",
+    "pretest": "npm run build",
     "test": "vitest run",
     "test:android-alignment": "python3 test/android-page-alignment.test.py",
     "test:watch": "vitest",
