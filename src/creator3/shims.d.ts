@@ -16,5 +16,6 @@ declare module 'cc' {
 }
 
 declare module 'cc/env' {
+  export const EDITOR: boolean;
   export const NATIVE: boolean;
 }

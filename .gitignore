@@ -44,3 +44,11 @@
 /packages/*/bin/
 /packages/*/LICENSE
 /packages/*/THIRD_PARTY_NOTICES
+
+# Generated Web bootstrap bundle.
+/packages/cocos/web/bootstrap.js*
+
+# Platform runtime bundled outside the game module graph.
+/packages/cocos/runtime/
+
+/packages/cocos-session-replay/runtime/

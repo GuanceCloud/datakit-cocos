@@ -36,6 +36,20 @@
       "import": "./dist/creator3/core/plugin-api.js",
       "require": "./dist/creator2/core/plugin-api.js",
       "default": "./dist/creator2/core/plugin-api.js"
+    },
+    "./web/creator2": {
+      "types": "./dist/creator2/web/creator2.d.ts",
+      "default": "./dist/creator2/web/creator2.js"
+    },
+    "./web/creator3": {
+      "types": "./dist/creator3/web/creator3.d.ts",
+      "default": "./dist/creator3/web/creator3.js"
+    },
+    "./web/bootstrap": {
+      "types": "./dist/creator2/web/bootstrap.d.ts",
+      "import": "./dist/creator3/web/bootstrap.js",
+      "require": "./dist/creator2/web/bootstrap.js",
+      "default": "./dist/creator2/web/bootstrap.js"
     }
   },
   "files": [
@@ -48,7 +62,9 @@
     "README.md",
     "LICENSE",
     "THIRD_PARTY_NOTICES",
-    "plugin-api"
+    "plugin-api",
+    "web",
+    "runtime"
   ],
   "bin": {
     "guance-cocos": "bin/cli.cjs"
