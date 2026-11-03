@@ -35,6 +35,7 @@ vi.mock('cc', () => ({
   },
   Vec3: class { constructor(public x: number, public y: number, public z: number) {} },
   v3: (x: number, y: number, z: number) => ({ x, y, z }),
+  v2: (x: number, y: number) => ({ x, y }),
   RenderTexture: class {
     initWithSize(): void {}
     reset(): void {}
@@ -72,6 +73,21 @@ function loadComponent(creator: number): any {
 
 afterEach(() => vi.unstubAllGlobals());
 
+function privacyNode(x: number, y: number, width: number, height: number): any {
+  const transform = {
+    contentSize: { width, height }, anchorPoint: { x: 0, y: 0 },
+    convertToWorldSpaceAR: (point: { x: number; y: number }) => ({ x: point.x + x, y: point.y + y }),
+  };
+  const node: any = {
+    worldPosition: { z: 0 }, children: [], mask: undefined,
+    getContentSize: () => transform.contentSize,
+    getAnchorPoint: () => transform.anchorPoint,
+    convertToWorldSpaceAR: transform.convertToWorldSpaceAR,
+    getComponent: (type: unknown) => type === creator3Engine.UITransform ? transform : type === 'cc.Mask' ? node.mask : undefined,
+  };
+  return node;
+}
+
 describe.each([2, 3])('Creator %s ReplayPrivacy component', (creator) => {
   let capture: FTCreator2CanvasCapture | FTCreator3CanvasCapture;
   let components: any[];
@@ -83,12 +99,7 @@ describe.each([2, 3])('Creator %s ReplayPrivacy component', (creator) => {
   beforeEach(() => {
     vi.stubGlobal('cc', creator3Engine);
     asset = loadComponent(creator);
-    const bounds = () => ({ x: 2, y: 2, width: 4, height: 4 });
-    node = {
-      worldPosition: { z: 0 },
-      getBoundingBoxToWorld: bounds,
-      getComponent: () => ({ getBoundingBoxToWorld: bounds }),
-    };
+    node = privacyNode(2, 2, 4, 4);
     component = new asset.default();
     component.node = node;
     components = [component];
@@ -180,10 +191,51 @@ describe.each([2, 3])('Creator %s ReplayPrivacy component', (creator) => {
     await expectMode();
   });
 
+  it('removes hidden or destroyed input masks and restores overrides when the node reactivates', async () => {
+    components = [];
+    editBoxes.push({ node });
+    await expectMode('mask');
+    node.activeInHierarchy = false;
+    await expectMode();
+    capture.setPrivacy(node, 'hide');
+    await expectMode();
+    node.activeInHierarchy = true;
+    await expectMode('hide');
+    capture.setPrivacy(node, 'unmask');
+    await expectMode('mask');
+    node.isValid = false;
+    await expectMode();
+  });
+
   it('fails closed when a component region cannot be projected', async () => {
     const camera = state.scene.getComponentInChildren();
     camera.getWorldToScreenPoint = camera.worldToScreen = () => ({ x: NaN, y: 0 });
     await expect(capture.capture(10)).rejects.toThrow(/privacy/i);
     expect(camera.targetTexture).toBeUndefined();
+  });
+
+  it('clips scrolling and oversized descendants without covering public siblings', async () => {
+    const viewport = privacyNode(3, 3, 2, 2);
+    viewport.mask = { enabledInHierarchy: true, inverted: false };
+    viewport.children = [privacyNode(-2, -2, 12, 12)];
+    node.children = [viewport];
+    await expectMode('mask');
+    component.mode = asset.ReplayPrivacyMode.Hide;
+    await expectMode('hide');
+    viewport.mask.enabledInHierarchy = false;
+    expect((await capture.capture(10))!.privacyRegions).toEqual([{ x: -2, y: 0, width: 12, height: 12, mode: 'hide' }]);
+    viewport.mask.enabledInHierarchy = true;
+    viewport.mask.inverted = true;
+    expect((await capture.capture(10))!.privacyRegions).toEqual([{ x: -2, y: 0, width: 12, height: 12, mode: 'hide' }]);
+  });
+
+  it('omits a private node outside an ancestor clip and restores it when scrolled into view', async () => {
+    const viewport = privacyNode(0, 0, 1, 1);
+    viewport.mask = { enabledInHierarchy: true, inverted: false };
+    node.parent = viewport;
+    await expectMode();
+    node.parent = privacyNode(2, 2, 4, 4);
+    node.parent.mask = viewport.mask;
+    await expectMode('mask');
   });
 });

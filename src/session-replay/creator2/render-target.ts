@@ -69,6 +69,10 @@ export function createReplayTarget(width: number, height: number, previousTextur
           checkComplete();
           const pixels = new Uint8Array(width * height * 4);
           gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+          // Replay represents the opaque native screen. RGB is already composited,
+          // but JSB can leave fractional framebuffer alpha after translucent UI draws.
+          // Native encoders would otherwise unpremultiply it and brighten those pixels.
+          for (let alpha = 3; alpha < pixels.length; alpha += 4) pixels[alpha] = 255;
           return pixels;
         } finally {
           restore();

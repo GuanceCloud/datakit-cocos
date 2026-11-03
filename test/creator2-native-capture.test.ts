@@ -9,7 +9,7 @@ afterEach(() => {
   else (globalThis as { cc?: unknown }).cc = originalCC;
 });
 
-function nativeScene(options: { packed?: boolean; nativeExtension?: boolean; version?: string; incomplete?: boolean; readError?: boolean; initError?: boolean; nested?: boolean } = {}) {
+function nativeScene(options: { packed?: boolean; nativeExtension?: boolean; version?: string; incomplete?: boolean; readError?: boolean; initError?: boolean; nested?: boolean; rgba?: number[] } = {}) {
   const events: string[] = [];
   const previousFramebuffer = options.nested ? { name: 'business-render-target' } : null;
   let bound: any = previousFramebuffer;
@@ -69,7 +69,7 @@ function nativeScene(options: { packed?: boolean; nativeExtension?: boolean; ver
     readPixels: vi.fn((_x: number, _y: number, _w: number, _h: number, _format: number, _type: number, pixels: Uint8Array) => {
       if (options.readError) throw new Error('native readback failed');
       if (bound !== captureFramebuffer) throw new Error('wrong framebuffer');
-      pixels.set([1, 2, 3, 255, 4, 5, 6, 255]);
+      pixels.set(options.rgba || [1, 2, 3, 255, 4, 5, 6, 255]);
       events.push('read');
     }),
   };
@@ -91,6 +91,12 @@ function nativeScene(options: { packed?: boolean; nativeExtension?: boolean; ver
 }
 
 describe('Creator 2 native replay framebuffer compatibility', () => {
+  it('preserves composited screen colors when translucent draws leave fractional framebuffer alpha', async () => {
+    nativeScene({ rgba: [140, 146, 159, 191, 12, 18, 34, 0] });
+    const frame = await new FTCreator2CanvasCapture().capture(2);
+    expect([...frame!.rgba]).toEqual([12, 18, 34, 255, 140, 146, 159, 255]);
+  });
+
   it.each([false, true])('preserves depth/stencil and restores the business target before destruction (nested=%s)', async (nested) => {
     const scene = nativeScene({ nested });
     const frame = await new FTCreator2CanvasCapture().capture(2);

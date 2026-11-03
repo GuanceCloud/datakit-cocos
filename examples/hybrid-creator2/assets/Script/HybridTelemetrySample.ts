@@ -1,9 +1,20 @@
+import { ReplayVersionDiffScene } from './ReplayVersionDiffScene';
+import { ReplayEvidenceScene } from './ReplayEvidenceScene';
+import { ReplayNativeScene } from './ReplayNativeScene';
+import { ReplayAssetScene } from './ReplayAssetScene';
+import { ReplayMotionScene } from './ReplayMotionScene';
+import { ReplayEffectsScene } from './ReplayEffectsScene';
+import { ReplayLayoutScene } from './ReplayLayoutScene';
+import { ReplayScrollScene } from './ReplayScrollScene';
+import { ReplayBasicScene } from './ReplayBasicScene';
+import { ReplayInputScene } from './ReplayInputScene';
 import StarportScene from './StarportScene';
 import ReplayPrivacy, { ReplayPrivacyMode } from '../guance-cocos-sdk/ReplayPrivacy';
 import { guanceSdk as baseSdk } from '@cloudcare/cocos-sdk/creator2';
 import { withSessionReplay } from '@cloudcare/cocos-session-replay/creator2';
 
-const guanceSdk = withSessionReplay(baseSdk);
+// Creator 2 evaluates scene scripts during export, before the native runtime exists.
+let guanceSdk: ReturnType<typeof withSessionReplay>;
 
 const { ccclass } = cc._decorator;
 
@@ -34,6 +45,7 @@ let activeSample: HybridTelemetryRuntime | undefined;
 export default class HybridTelemetrySample extends cc.Component {
   start(): void {
     if (activeSample) return;
+    guanceSdk = withSessionReplay(baseSdk);
     activeSample = new HybridTelemetryRuntime();
     activeSample.start();
   }
@@ -42,7 +54,7 @@ export default class HybridTelemetrySample extends cc.Component {
 /** Call this only when the native host removes or leaves the Cocos container. */
 export function leaveHybridCocos(): void {
   if (activeSample) activeSample.leaveCocosPage();
-  else guanceSdk.leaveCocos();
+  else guanceSdk?.leaveCocos();
 }
 
 interface UntrackedXhrMethods {
@@ -52,6 +64,7 @@ interface UntrackedXhrMethods {
 }
 
 class HybridTelemetryRuntime {
+  private inputCoverageNode?: cc.Node;
   private sampleRoot?: cc.Node;
   private gameNode?: cc.Node;
   private status?: cc.Label;
@@ -409,7 +422,57 @@ class HybridTelemetryRuntime {
 
     const statusPanel = this.panel(root, 'StatusPanel', 0, -180, 780, 84, COLORS.panel);
     this.status = this.label(statusPanel, 'Preparing Hybrid integration…', 0, 0, 730, 50, 18, COLORS.muted);
+    this.button(root, 'InputCoverage', 'Inputs', -400, -300, 150, 32, () => this.openCoverage('input'), COLORS.info);
+    this.button(root, 'BasicCoverage', 'Basic', -240, -300, 150, 32, () => this.openCoverage('basic'), COLORS.info);
+    this.button(root, 'ScrollCoverage', 'Scroll', -80, -300, 150, 32, () => this.openCoverage('scroll'), COLORS.info);
+    this.button(root, 'LayoutCoverage', 'Layout', 80, -300, 150, 32, () => this.openCoverage('layout'), COLORS.info);
+    this.button(root, 'EffectsCoverage', 'Effects', 240, -300, 150, 32, () => this.openCoverage('effects'), COLORS.info);
+    this.button(root, 'MotionCoverage', 'Motion', 400, -300, 150, 32, () => this.openCoverage('motion'), COLORS.info);
+    this.button(root, 'VersionDiffCoverage', '2.4.x differences', -350, -180, 220, 26, () => this.openCoverage('version-diff'), COLORS.info);
+    this.button(root, 'EvidenceCoverage', 'Screenshot evidence', 350, -180, 230, 26, () => this.openCoverage('evidence'), COLORS.info);
+    this.button(root, 'NativeCoverage', 'Mesh + light + 3D skeleton', 0, -143, 450, 24, () => this.openCoverage('native'), COLORS.info);
+    this.button(root, 'AssetCoverage', 'Replay: tile + skeleton assets', 0, -222, 420, 30, () => this.openCoverage('assets'), COLORS.info);
     this.button(root, 'StarportGame', 'Open Starport Game', -160, -258, 360, 40, () => this.openGame(), COLORS.primary);
+  }
+
+  private async openCoverage(kind: 'input' | 'basic' | 'scroll' | 'layout' | 'effects' | 'motion' | 'assets' | 'native' | 'evidence' | 'version-diff'): Promise<void> {
+    if (this.inputCoverageNode || !this.sampleRoot) return;
+    const sampleRoot = this.sampleRoot;
+    const previousClearFlags = this.replayCamera && this.replayCamera.clearFlags;
+    // The 3D coverage page has no opaque full-screen UI panel.
+    if (kind === "native" && this.replayCamera) this.replayCamera.clearFlags = cc.Camera.ClearFlags.COLOR | cc.Camera.ClearFlags.DEPTH | cc.Camera.ClearFlags.STENCIL;
+    cc.view.setDesignResolutionSize(960, 640, cc.ResolutionPolicy.SHOW_ALL);
+    sampleRoot.active = false;
+    if (this.privacyMaskProbe) guanceSdk.replay.setPrivacy(this.privacyMaskProbe, 'unmask');
+    const node = new cc.Node('ReplayCoverage');
+    sampleRoot.parent!.addChild(node);
+    this.inputCoverageNode = node;
+    const restore = (): void => {
+      if (this.inputCoverageNode !== node) return;
+      this.inputCoverageNode = undefined;
+      if (this.replayCamera && previousClearFlags !== undefined) this.replayCamera.clearFlags = previousClearFlags;
+      node.active = false;
+      node.destroy();
+      sampleRoot.children.slice().forEach(child => { child.active = false; child.destroy(); });
+      this.privacyLayoutMoved = false;
+      this.replayState = 0;
+      sampleRoot.active = true;
+      this.render(sampleRoot);
+      this.setStatus('Coverage closed · reopen to verify fresh state', COLORS.primary);
+      cc.view.setDesignResolutionSize(960, 640, this.maskShowAll ? cc.ResolutionPolicy.SHOW_ALL : cc.ResolutionPolicy.FIXED_HEIGHT);
+      guanceSdk.setReplayCamera(this.replayCamera);
+      if (this.entered) { guanceSdk.rum.stopView(); guanceSdk.rum.startView(VIEW_NAME, ATTRIBUTES); }
+    };
+    try {
+      if (this.entered) { guanceSdk.rum.stopView(); guanceSdk.rum.startView(kind === 'version-diff' ? 'Replay/VersionDiffCoverage' : kind === 'input' ? 'Replay/InputCoverage' : kind === 'basic' ? 'Replay/BasicCoverage' : kind === 'scroll' ? 'Replay/ScrollCoverage' : kind === 'layout' ? 'Replay/LayoutCoverage' : kind === 'effects' ? 'Replay/EffectsCoverage' : kind === 'motion' ? 'Replay/MotionCoverage' : kind === 'native' ? 'Replay/NativeCoverage' : 'Replay/AssetCoverage', ATTRIBUTES); }
+      const scene = kind === 'version-diff' ? node.addComponent(ReplayVersionDiffScene) : kind === 'evidence' ? node.addComponent(ReplayEvidenceScene) : kind === 'input' ? node.addComponent(ReplayInputScene) : kind === 'basic' ? node.addComponent(ReplayBasicScene) : kind === 'scroll' ? node.addComponent(ReplayScrollScene) : kind === 'layout' ? node.addComponent(ReplayLayoutScene) : kind === 'effects' ? node.addComponent(ReplayEffectsScene) : kind === 'motion' ? node.addComponent(ReplayMotionScene) : kind === 'native' ? node.addComponent(ReplayNativeScene) : node.addComponent(ReplayAssetScene);
+      await scene.initialize(restore, (caseId: string, stage: string) => {
+        console.log('[ReplayFull249]', JSON.stringify({ engine: cc.ENGINE_VERSION, kind, case_id: caseId, stage, hostTime: Date.now() }));
+        if (!this.entered) return;
+        // Only fixed case identifiers and phases leave this page; never forward input payloads.
+        guanceSdk.rum.addAction(`replay_${kind}_case`, 'custom', { ...ATTRIBUTES, case_id: caseId, stage });
+      });
+    } catch (error) { console.error("[ReplayCoverage] initialization failed", String(error), error && (error as Error).stack); restore(); this.setStatus(`Unable to open coverage: ${String(error)}`, COLORS.danger); }
   }
 
   private openGame(): void {

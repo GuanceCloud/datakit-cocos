@@ -5,6 +5,7 @@ import { frameFingerprint } from '../core/replay.js';
 import { persistReplayFrame, disposeReplayFrame } from '../core/replay-file.js';
 import { projectPrivacyBounds } from '../core/replay-privacy.js';
 import { collectReplayPrivacyNodes } from '../core/replay-privacy-nodes.js';
+import { clippedPrivacyBounds, ownPrivacyBounds } from '../core/replay-privacy-bounds.js';
 import { waitForRenderTextureReadback } from './replay-render-cycle.js';
 
 const CAPTURE_CANCELLED = Symbol('Replay capture cancelled');
@@ -105,8 +106,13 @@ export class FTCreator3CanvasCapture implements FTCanvasCapture {
     // A camera that preserves its framebuffer must not accumulate previous
     // replay snapshots in a reused target (for example, moving overlay UI).
     const clearsTarget = (source.clearFlags & Camera.ClearFlag.SOLID_COLOR) === Camera.ClearFlag.SOLID_COLOR;
+    // Creator 3.8 native post-processing keys its output resource by camera ID.
+    // updateRenderWindow replaces the window but leaves RenderSwapchain.texture
+    // pointing at the first target. GLES needs a fresh target for readback, so
+    // replace its isolated camera too, giving that target a new output slot.
+    const replacesPostProcessCamera = sys.os !== sys.OS?.IOS && source.usePostProcess;
     if (current && this.isCurrent(current) && current.source === source
-      && current.width === width && current.height === height) {
+      && current.width === width && current.height === height && !replacesPostProcessCamera) {
       // Native GLES3 repeated readback of one target can read the screen FBO
       // instead. Keep the isolated camera, but use a fresh target outside iOS;
       // Metal reuse is covered by native screenshot regression checks.
@@ -206,7 +212,20 @@ export class FTCreator3CanvasCapture implements FTCanvasCapture {
     );
     const regions: FTPrivacyRegion[] = [];
     nodes.forEach((mode, node: any) => {
-      const bounds = node?.getComponent?.(UITransform)?.getBoundingBoxToWorld?.();
+      const bounds = clippedPrivacyBounds(node, {
+        ownBounds: (current: any) => {
+          const transform = current.getComponent?.(UITransform);
+          if (!transform) return undefined;
+          const size = transform.contentSize;
+          const anchor = transform.anchorPoint;
+          return ownPrivacyBounds(size.width, size.height, anchor.x, anchor.y,
+            (x, y) => transform.convertToWorldSpaceAR(new Vec3(x, y, 0)));
+        },
+        clipsChildren: (current: any) => {
+          const mask = current.getComponent?.('cc.Mask');
+          return !!mask?.enabledInHierarchy && !mask.inverted;
+        },
+      });
       if (!bounds) return;
       const worldZ = node.worldPosition?.z || 0;
       const projected = projectPrivacyBounds(
