@@ -39,7 +39,7 @@ describe('Creator 2 replay capture', () => {
 
       readPixels(): Uint8Array {
         return new Uint8Array([
-          1, 0, 0, 255, 2, 0, 0, 255,
+          1, 0, 0, 191, 2, 0, 0, 255,
           3, 0, 0, 255, 4, 0, 0, 255,
         ]);
       }
@@ -81,7 +81,7 @@ describe('Creator 2 replay capture', () => {
     expect(destroyed).toBe(true);
     expect([...frame!.rgba]).toEqual([
       3, 0, 0, 255, 4, 0, 0, 255,
-      1, 0, 0, 255, 2, 0, 0, 255,
+      1, 0, 0, 191, 2, 0, 0, 255,
     ]);
   });
 
@@ -103,7 +103,9 @@ describe('Creator 2 replay capture', () => {
       getWorldToScreenPoint: project,
     };
     const privateNode = {
-      getBoundingBoxToWorld: () => ({ x: -20, y: -10, width: 40, height: 20 }),
+      getContentSize: () => ({ width: 40, height: 20 }),
+      getAnchorPoint: () => ({ x: 0.5, y: 0.5 }),
+      convertToWorldSpaceAR: (point: { x: number; y: number }) => point,
       // Creator 2 requires a caller-provided output vector.
       getWorldPosition: (out: { x: number; y: number; z: number }) => {
         out.x = 0;

@@ -23,8 +23,12 @@
 # Generated from the common acceptance game by npm run game:sync.
 /assets/acceptance-game/
 /assets/acceptance-game.meta
+/assets/acceptance-components/
+/assets/acceptance-components.meta
 /assets/resources/starport-sfx/
 /assets/resources/starport-sfx.meta
 
 /assets/guance-cocos-sdk.meta
+/assets/guance-cocos-sdk-runtime/
+/assets/guance-cocos-sdk-runtime.meta
 /cocos-sdk.config.json

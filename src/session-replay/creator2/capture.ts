@@ -4,6 +4,7 @@ import { flipRgbaRows } from '../core/replay-pixels.js';
 import { persistReplayFrame, disposeReplayFrame } from '../core/replay-file.js';
 import { projectPrivacyBounds } from '../core/replay-privacy.js';
 import { collectReplayPrivacyNodes } from '../core/replay-privacy-nodes.js';
+import { clippedPrivacyBounds, ownPrivacyBounds } from '../core/replay-privacy-bounds.js';
 import type { FTCapturedFrame, FTPrivacyRegion, FTReplayPrivacyMode, FTStoredFrame } from '../core/types.js';
 import { createReplayTarget } from './render-target.js';
 
@@ -92,7 +93,19 @@ export class FTCreator2CanvasCapture implements FTCanvasCapture {
     const screenHeight = cc.visibleRect?.height || sourceHeight;
     const regions: FTPrivacyRegion[] = [];
     nodes.forEach((mode, node: any) => {
-      const bounds = node?.getBoundingBoxToWorld?.();
+      const bounds = clippedPrivacyBounds(node, {
+        ownBounds: (current: any) => {
+          if (!current.convertToWorldSpaceAR) return undefined;
+          const size = current.getContentSize();
+          const anchor = current.getAnchorPoint();
+          return ownPrivacyBounds(size.width, size.height, anchor.x, anchor.y,
+            (x, y) => current.convertToWorldSpaceAR(cc.v2(x, y)));
+        },
+        clipsChildren: (current: any) => {
+          const mask = current.getComponent?.('cc.Mask');
+          return !!mask?.enabledInHierarchy && !mask.inverted;
+        },
+      });
       if (!bounds) return;
       const worldZ = node.getWorldPosition?.(cc.v3(0, 0, 0)).z ?? 0;
       const projected = projectPrivacyBounds(

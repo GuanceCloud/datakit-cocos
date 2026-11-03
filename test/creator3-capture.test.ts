@@ -1,7 +1,7 @@
 /// <reference path="../src/creator3/shims.d.ts" />
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Camera, Node } from 'cc';
+import { Camera, Node, UITransform } from 'cc';
 import { FTCreator3CanvasCapture } from '../src/session-replay/creator3/capture';
 import { applyPrivacyRegions } from '../src/session-replay/core/replay';
 
@@ -132,7 +132,10 @@ function setup(visible = { width: 1920, height: 1080 }, previous?: { width: numb
   captures.push(capture);
   capture.setPrivacy({
     worldPosition: { z: 30 },
-    getComponent: () => ({ getBoundingBoxToWorld: () => ({ x: 0.2, y: 0.2, width: 0.2, height: 0.2 }) }),
+    getComponent: (type: unknown) => type === UITransform ? {
+      contentSize: { width: 0.2, height: 0.2 }, anchorPoint: { x: 0, y: 0 },
+      convertToWorldSpaceAR: (point: { x: number; y: number }) => ({ x: point.x + 0.2, y: point.y + 0.2 }),
+    } : undefined,
   }, 'mask');
   return { capture, source, targetWrite };
 }
@@ -216,6 +219,25 @@ describe('Creator 3 isolated replay capture', () => {
     expect(state.textures).toHaveLength(3);
     expect(state.textures.map(texture => texture.destroyed)).toEqual([true, true, false]);
     expect(state.cameras[1].targetTexture).toBe(state.textures[2]);
+  });
+  it('gives each Android post-process target its own isolated camera', async () => {
+    const { capture, source, targetWrite } = setup();
+    source.usePostProcess = true;
+    source.postProcess = { settings: new Map() };
+    await take(capture);
+    const texture = state.textures[0];
+    source.postProcess.settings.set('Bloom', { intensity: 4 });
+    await take(capture);
+    await take(capture);
+    expect(texture.destroyed).toBe(true);
+    expect(state.textures).toHaveLength(3);
+    expect(state.cameras[3].postProcess).toBe(source.postProcess);
+    expect(state.cameras[3].usePostProcess).toBe(true);
+    expect(targetWrite).not.toHaveBeenCalled();
+    expect(state.cameras).toHaveLength(4);
+    expect(state.cameras[1].node.isValid).toBe(false);
+    expect(state.cameras[2].node.isValid).toBe(false);
+    expect(state.cameras[3].node.isValid).toBe(true);
   });
   it.each(['iOS', 'Android'])('preserves pixel orientation on %s', async os => {
     const { capture } = setup();

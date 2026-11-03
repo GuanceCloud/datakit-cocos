@@ -22,5 +22,11 @@ export function collectReplayPrivacyNodes(
   editBoxes.forEach((editBox) => {
     if (!nodes.has(editBox.node)) nodes.set(editBox.node, 'mask');
   });
+  // getComponentsInChildren includes inactive nodes in both Creator generations.
+  // Keep overrides registered so reactivation restores their mode on the next frame.
+  nodes.forEach((_mode, node) => {
+    const state = node as { isValid?: boolean; activeInHierarchy?: boolean } | null;
+    if (!state || state.isValid === false || state.activeInHierarchy === false) nodes.delete(node);
+  });
   return nodes;
 }
